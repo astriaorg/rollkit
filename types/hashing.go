@@ -1,10 +1,15 @@
 package types
 
 import (
+	"sync"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/rlp"
 	tmversion "github.com/tendermint/tendermint/proto/tendermint/version"
 	tmtypes "github.com/tendermint/tendermint/types"
+	"golang.org/x/crypto/sha3"
 )
 
 // Hash returns ABCI-compatible hash of a header.
@@ -41,4 +46,32 @@ func (h *Header) Hash() [32]byte {
 // Hash returns ABCI-compatible hash of a block.
 func (b *Block) Hash() [32]byte {
 	return b.Header.Hash()
+}
+
+// Hash returns ethereum-compatible hash of a block.
+func (b *Block) RlpHash() [32]byte {
+	return b.Header.RlpHash()
+}
+
+// Hash returns ethereum-compatible hash of a block.
+func (h *Header) RlpHash() [32]byte {
+	return rlpHash(h)
+}
+
+// Hash returns ethereum-compatible hash of a block.
+func (txs *Txs) RlpHash() [32]byte {
+	return rlpHash(txs)
+}
+
+var hasherPool = sync.Pool{
+	New: func() interface{} { return sha3.NewLegacyKeccak256() },
+}
+
+func rlpHash(x interface{}) (h common.Hash) {
+	sha := hasherPool.Get().(crypto.KeccakState)
+	defer hasherPool.Put(sha)
+	sha.Reset()
+	rlp.Encode(sha, x)
+	sha.Read(h[:])
+	return h
 }

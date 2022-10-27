@@ -1,11 +1,17 @@
 package store
 
 import (
+	"bytes"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync/atomic"
 
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	tmstate "github.com/tendermint/tendermint/proto/tendermint/state"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	tmtypes "github.com/tendermint/tendermint/types"
@@ -55,8 +61,65 @@ func (s *DefaultStore) Height() uint64 {
 
 // SaveBlock adds block to the store along with corresponding commit.
 // Stored height is updated if block height is greater than stored value.
-func (s *DefaultStore) SaveBlock(block *types.Block, commit *types.Commit) error {
-	hash := block.Header.Hash()
+func (s *DefaultStore) SaveBlock(block *types.Block, commit *types.Commit, responses *tmtypes.ABCIResponses) error {
+	ethHeader, err := block.ToEthHeader()
+	if err != nil {
+		return fmt.Errorf("failed to convert optimint header to eth header: %w", err)
+	}
+	fmt.Println("SaveBlock TM ParentHash: ", hexutil.Bytes(block.Header.LastHeaderHash[:]))
+	fmt.Println("SaveBlock Eth ParentHash: ", ethHeader.ParentHash)
+
+	var txRoot common.Hash
+	for _, event := range responses.EndBlock.Events {
+		if event.Type != "tx_root" {
+			continue
+		}
+		for _, attr := range event.Attributes {
+			if bytes.Equal(attr.Key, []byte("ethTxRoot")) {
+				txRoot = common.HexToHash(string(attr.Value))
+				break
+			}
+		}
+	}
+	fmt.Println("SaveBlock txRoot: ", txRoot)
+	// copy(block.Header.LastHeaderHash[:], txRoot[:])
+	ethHeader.TxHash = txRoot
+	block.Header.DataHash = txRoot
+
+	var bloom ethtypes.Bloom
+	for _, event := range responses.EndBlock.Events {
+		if event.Type != "block_bloom" {
+			continue
+		}
+
+		for _, attr := range event.Attributes {
+			if bytes.Equal(attr.Key, []byte("bloom")) {
+				bloom = ethtypes.BytesToBloom(attr.Value)
+				break
+			}
+		}
+	}
+	ethHeader.Bloom = bloom
+
+	gasUsed := uint64(0)
+	for _, txsResult := range responses.DeliverTxs {
+		// workaround for cosmos-sdk bug. https://github.com/cosmos/cosmos-sdk/issues/10832
+		if txsResult.GetCode() == 11 && strings.Contains(txsResult.GetLog(), "no block gas left to run tx: out of gas") {
+			// block gas limit has exceeded, other txs must have failed with same reason.
+			break
+		}
+		gasUsed += uint64(txsResult.GetGasUsed())
+	}
+	ethHeader.GasUsed = gasUsed
+
+	ethHeaderJSON, err := json.MarshalIndent(ethHeader, "", "  ")
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("SaveBlock header: %s\n", string(ethHeaderJSON))
+	hash := ethHeader.Hash()
+	fmt.Printf("SaveBlock height: %d hash: %s\n", ethHeader.Number, hash)
+
 	blockBlob, err := block.MarshalBinary()
 	if err != nil {
 		return fmt.Errorf("failed to marshal Block to binary: %w", err)

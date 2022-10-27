@@ -1,16 +1,21 @@
 package block
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	abci "github.com/tendermint/tendermint/abci/types"
 	tmcrypto "github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/merkle"
+	tmstate "github.com/tendermint/tendermint/proto/tendermint/state"
 	"github.com/tendermint/tendermint/proxy"
 	tmtypes "github.com/tendermint/tendermint/types"
 	"go.uber.org/multierr"
@@ -219,7 +224,7 @@ func (m *Manager) SyncLoop(ctx context.Context) {
 			m.logger.Debug("block body retrieved from DALC",
 				"height", block.Header.Height,
 				"daHeight", daHeight,
-				"hash", block.Hash(),
+				"hash", block.RlpHash(),
 			)
 			m.syncCache[block.Header.Height] = block
 			m.retrieveCond.Signal()
@@ -266,7 +271,7 @@ func (m *Manager) trySyncNextBlock(ctx context.Context, daHeight uint64) error {
 		if err != nil {
 			return fmt.Errorf("failed to ApplyBlock: %w", err)
 		}
-		err = m.store.SaveBlock(b1, commit)
+		err = m.store.SaveBlock(b1, commit, responses)
 		if err != nil {
 			return fmt.Errorf("failed to save block: %w", err)
 		}
@@ -403,11 +408,56 @@ func (m *Manager) publishBlock(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("error while loading last block: %w", err)
 		}
-		lastHeaderHash = lastBlock.Header.Hash()
+		lastBlockEthHeader, err := lastBlock.ToEthHeader()
+		if err != nil {
+			return fmt.Errorf("error convering last block to ethHeader: %w", err)
+		}
+		blockResp, err := m.store.LoadBlockResponses(height)
+		if err != nil {
+			return fmt.Errorf("error loading last block responses: %w", err)
+		}
+		gasUsed := uint64(0)
+		for _, txsResult := range blockResp.DeliverTxs {
+			// workaround for cosmos-sdk bug. https://github.com/cosmos/cosmos-sdk/issues/10832
+			if txsResult.GetCode() == 11 && strings.Contains(txsResult.GetLog(), "no block gas left to run tx: out of gas") {
+				// block gas limit has exceeded, other txs must have failed with same reason.
+				break
+			}
+			gasUsed += uint64(txsResult.GetGasUsed())
+		}
+		lastBlockEthHeader.GasUsed = gasUsed
+
+		var bloom ethtypes.Bloom
+		for _, event := range blockResp.EndBlock.Events {
+			if event.Type != "block_bloom" {
+				continue
+			}
+
+			for _, attr := range event.Attributes {
+				if bytes.Equal(attr.Key, []byte("bloom")) {
+					bloom = ethtypes.BytesToBloom(attr.Value)
+					break
+				}
+			}
+		}
+		lastBlockEthHeader.Bloom = bloom
+
+		fmt.Println("loadblock parentHash: ", lastBlockEthHeader.ParentHash)
+		fmt.Println("loadblock txRoot: ", lastBlockEthHeader.TxHash)
+
+		ethHeaderJSON, err := json.MarshalIndent(lastBlockEthHeader, "", "  ")
+		if err != nil {
+			panic(err)
+		}
+		fmt.Printf("publishBlock header: %s\n", string(ethHeaderJSON))
+		lastHeaderHash = lastBlockEthHeader.Hash()
+		fmt.Println("publishBlock lastHeaderHash: ", lastBlockEthHeader.Hash())
 	}
 
 	var block *types.Block
 	var commit *types.Commit
+	var newState types.State
+	var responses *tmstate.ABCIResponses
 
 	// Check if there's an already stored block at a newer height
 	// If there is use that instead of creating a new block
@@ -415,6 +465,11 @@ func (m *Manager) publishBlock(ctx context.Context) error {
 	if err == nil {
 		m.logger.Info("Using pending block", "height", newHeight)
 		block = pendingBlock
+
+		newState, responses, err = m.executor.ApplyBlock(ctx, m.lastState, block)
+		if err != nil {
+			return err
+		}
 	} else {
 		m.logger.Info("Creating and publishing block", "height", newHeight)
 		block = m.executor.CreateBlock(newHeight, lastCommit, lastHeaderHash, m.lastState)
@@ -434,17 +489,16 @@ func (m *Manager) publishBlock(ctx context.Context) error {
 			Signatures: []types.Signature{sign},
 		}
 
-		// SaveBlock commits the DB tx
-		err = m.store.SaveBlock(block, commit)
+		newState, responses, err = m.executor.ApplyBlock(ctx, m.lastState, block)
 		if err != nil {
 			return err
 		}
-	}
 
-	// Apply the block but DONT commit
-	newState, responses, err := m.executor.ApplyBlock(ctx, m.lastState, block)
-	if err != nil {
-		return err
+		// SaveBlock commits the DB tx
+		err = m.store.SaveBlock(block, commit, responses)
+		if err != nil {
+			return err
+		}
 	}
 
 	err = m.submitBlockToDA(ctx, block)
