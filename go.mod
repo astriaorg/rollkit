@@ -5,7 +5,7 @@ go 1.18
 require (
 	github.com/celestiaorg/go-cnc v0.1.0
 	github.com/dgraph-io/badger/v3 v3.2103.3
-	github.com/ethereum/go-ethereum v1.10.25
+	github.com/ethereum/go-ethereum v1.10.19
 	github.com/go-kit/kit v0.12.0
 	github.com/gogo/protobuf v1.3.2
 	github.com/google/orderedcode v0.0.1
