@@ -1,17 +1,13 @@
 package block
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	abci "github.com/tendermint/tendermint/abci/types"
 	tmcrypto "github.com/tendermint/tendermint/crypto"
@@ -409,58 +405,14 @@ func (m *Manager) publishBlock(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("error while loading last block: %w", err)
 		}
-		lastBlockEthHeader, err := lastBlock.ToEthHeader()
-		if err != nil {
-			return fmt.Errorf("error convering last block to ethHeader: %w", err)
-		}
 		blockResp, err := m.store.LoadBlockResponses(height)
 		if err != nil {
 			return fmt.Errorf("error loading last block responses: %w", err)
 		}
-		gasUsed := uint64(0)
-		for _, txsResult := range blockResp.DeliverTxs {
-			// workaround for cosmos-sdk bug. https://github.com/cosmos/cosmos-sdk/issues/10832
-			if txsResult.GetCode() == 11 && strings.Contains(txsResult.GetLog(), "no block gas left to run tx: out of gas") {
-				// block gas limit has exceeded, other txs must have failed with same reason.
-				break
-			}
-			gasUsed += uint64(txsResult.GetGasUsed())
+		lastBlockEthHeader, err := lastBlock.ToEthHeader(blockResp)
+		if err != nil {
+			return fmt.Errorf("error convering last block to ethHeader: %w", err)
 		}
-		lastBlockEthHeader.GasUsed = gasUsed
-
-		var bloom ethtypes.Bloom
-		for _, event := range blockResp.EndBlock.Events {
-			if event.Type != "block_bloom" {
-				continue
-			}
-
-			for _, attr := range event.Attributes {
-				if bytes.Equal(attr.Key, []byte("bloom")) {
-					bloom = ethtypes.BytesToBloom(attr.Value)
-					break
-				}
-			}
-		}
-		lastBlockEthHeader.Bloom = bloom
-
-		var gasLimit uint64
-		for _, event := range blockResp.EndBlock.Events {
-			if event.Type != "gas_limit" {
-				continue
-			}
-
-			for _, attr := range event.Attributes {
-				if bytes.Equal(attr.Key, []byte("ethGasLimit")) {
-					gasLimit, err = strconv.ParseUint(string(attr.Value), 10, 64)
-					if err != nil {
-						return fmt.Errorf("failed to parse gas limit: %w", err)
-					}
-					break
-				}
-			}
-		}
-		lastBlockEthHeader.GasLimit = uint64(uint32(gasLimit))
-
 		fmt.Println("loadblock parentHash: ", lastBlockEthHeader.ParentHash)
 		fmt.Println("loadblock txRoot: ", lastBlockEthHeader.TxHash)
 

@@ -1,16 +1,13 @@
 package client
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
-	"strings"
 	"time"
 
-	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	abcicli "github.com/tendermint/tendermint/abci/client"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/config"
@@ -417,40 +414,14 @@ func (c *Client) Block(ctx context.Context, height *int64) (*ctypes.ResultBlock,
 	if err != nil {
 		return nil, err
 	}
-	ethBlockHeader, err := block.ToEthHeader()
-	if err != nil {
-		return nil, err
-	}
 	blockResp, err := c.node.Store.LoadBlockResponses(heightValue)
 	if err != nil {
 		return nil, err
 	}
-	gasUsed := uint64(0)
-	for _, txsResult := range blockResp.DeliverTxs {
-		// workaround for cosmos-sdk bug. https://github.com/cosmos/cosmos-sdk/issues/10832
-		if txsResult.GetCode() == 11 && strings.Contains(txsResult.GetLog(), "no block gas left to run tx: out of gas") {
-			// block gas limit has exceeded, other txs must have failed with same reason.
-			break
-		}
-		gasUsed += uint64(txsResult.GetGasUsed())
+	ethBlockHeader, err := block.ToEthHeader(blockResp)
+	if err != nil {
+		return nil, err
 	}
-	ethBlockHeader.GasUsed = gasUsed
-
-	var bloom ethtypes.Bloom
-	for _, event := range blockResp.EndBlock.Events {
-		if event.Type != "block_bloom" {
-			continue
-		}
-
-		for _, attr := range event.Attributes {
-			if bytes.Equal(attr.Key, []byte("bloom")) {
-				bloom = ethtypes.BytesToBloom(attr.Value)
-				break
-			}
-		}
-	}
-	ethBlockHeader.Bloom = bloom
-
 	fmt.Println("loadblock parentHash: ", ethBlockHeader.ParentHash)
 	fmt.Println("loadblock txRoot: ", ethBlockHeader.TxHash)
 
@@ -488,40 +459,14 @@ func (c *Client) BlockByHash(ctx context.Context, hash []byte) (*ctypes.ResultBl
 	if err != nil {
 		return nil, err
 	}
-	ethBlockHeader, err := block.ToEthHeader()
-	if err != nil {
-		return nil, err
-	}
 	blockResp, err := c.node.Store.LoadBlockResponses(block.Header.Height)
 	if err != nil {
 		return nil, err
 	}
-	gasUsed := uint64(0)
-	for _, txsResult := range blockResp.DeliverTxs {
-		// workaround for cosmos-sdk bug. https://github.com/cosmos/cosmos-sdk/issues/10832
-		if txsResult.GetCode() == 11 && strings.Contains(txsResult.GetLog(), "no block gas left to run tx: out of gas") {
-			// block gas limit has exceeded, other txs must have failed with same reason.
-			break
-		}
-		gasUsed += uint64(txsResult.GetGasUsed())
+	ethBlockHeader, err := block.ToEthHeader(blockResp)
+	if err != nil {
+		return nil, err
 	}
-	ethBlockHeader.GasUsed = gasUsed
-
-	var bloom ethtypes.Bloom
-	for _, event := range blockResp.EndBlock.Events {
-		if event.Type != "block_bloom" {
-			continue
-		}
-
-		for _, attr := range event.Attributes {
-			if bytes.Equal(attr.Key, []byte("bloom")) {
-				bloom = ethtypes.BytesToBloom(attr.Value)
-				break
-			}
-		}
-	}
-	ethBlockHeader.Bloom = bloom
-
 	fmt.Println("loadblock parentHash: ", ethBlockHeader.ParentHash)
 	fmt.Println("loadblock txRoot: ", ethBlockHeader.TxHash)
 
