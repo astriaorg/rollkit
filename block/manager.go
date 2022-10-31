@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -441,6 +442,24 @@ func (m *Manager) publishBlock(ctx context.Context) error {
 			}
 		}
 		lastBlockEthHeader.Bloom = bloom
+
+		var gasLimit uint64
+		for _, event := range blockResp.EndBlock.Events {
+			if event.Type != "gas_limit" {
+				continue
+			}
+
+			for _, attr := range event.Attributes {
+				if bytes.Equal(attr.Key, []byte("ethGasLimit")) {
+					gasLimit, err = strconv.ParseUint(string(attr.Value), 10, 64)
+					if err != nil {
+						return fmt.Errorf("failed to parse gas limit: %w", err)
+					}
+					break
+				}
+			}
+		}
+		lastBlockEthHeader.GasLimit = uint64(uint32(gasLimit))
 
 		fmt.Println("loadblock parentHash: ", lastBlockEthHeader.ParentHash)
 		fmt.Println("loadblock txRoot: ", lastBlockEthHeader.TxHash)

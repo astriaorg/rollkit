@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync/atomic"
 
@@ -111,6 +112,24 @@ func (s *DefaultStore) SaveBlock(block *types.Block, commit *types.Commit, respo
 		gasUsed += uint64(txsResult.GetGasUsed())
 	}
 	ethHeader.GasUsed = gasUsed
+
+	var gasLimit uint64
+	for _, event := range responses.EndBlock.Events {
+		if event.Type != "gas_limit" {
+			continue
+		}
+
+		for _, attr := range event.Attributes {
+			if bytes.Equal(attr.Key, []byte("ethGasLimit")) {
+				gasLimit, err = strconv.ParseUint(string(attr.Value), 10, 64)
+				if err != nil {
+					return fmt.Errorf("failed to parse gas limit: %w", err)
+				}
+				break
+			}
+		}
+	}
+	ethHeader.GasLimit = uint64(uint32(gasLimit))
 
 	ethHeaderJSON, err := json.MarshalIndent(ethHeader, "", "  ")
 	if err != nil {
