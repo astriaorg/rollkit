@@ -35,6 +35,7 @@ jobs:
         with:
           repository: celestiaorg/ethermint
           path: ethermint
+          ref: eth-hashes
       - name: Move Stuff and Tidy
         run: |
           ls
