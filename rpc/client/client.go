@@ -716,7 +716,10 @@ func (c *Client) BlockSearch(ctx context.Context, query string, page, perPage *i
 		if err != nil {
 			return nil, err
 		}
-		rlpHash := b.RlpHash()
+		rlpHash, err := b.RlpHash()
+		if err != nil {
+			return nil, err
+		}
 		blocks = append(blocks, &ctypes.ResultBlock{
 			Block: block,
 			BlockID: types.BlockID{

@@ -218,15 +218,19 @@ func (m *Manager) SyncLoop(ctx context.Context) {
 		case blockEvent := <-m.blockInCh:
 			block := blockEvent.block
 			daHeight := blockEvent.daHeight
+			hash, err := block.RlpHash()
+			if err != nil {
+				m.logger.Info("failed to get hash of block", "error", err)
+			}
 			m.logger.Debug("block body retrieved from DALC",
 				"height", block.Header.Height,
 				"daHeight", daHeight,
-				"hash", block.RlpHash(),
+				"hash", hash,
 			)
 			m.syncCache[block.Header.Height] = block
 			m.retrieveCond.Signal()
 
-			err := m.trySyncNextBlock(ctx, daHeight)
+			err = m.trySyncNextBlock(ctx, daHeight)
 			if err != nil {
 				m.logger.Info("failed to sync next block", "error", err)
 			}

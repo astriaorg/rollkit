@@ -49,17 +49,17 @@ func (b *Block) Hash() [32]byte {
 }
 
 // Hash returns ethereum-compatible hash of a block.
-func (b *Block) RlpHash() [32]byte {
+func (b *Block) RlpHash() ([32]byte, error) {
 	return b.Header.RlpHash()
 }
 
 // Hash returns ethereum-compatible hash of a block.
-func (h *Header) RlpHash() [32]byte {
+func (h *Header) RlpHash() ([32]byte, error) {
 	return rlpHash(h)
 }
 
 // Hash returns ethereum-compatible hash of a block.
-func (txs *Txs) RlpHash() [32]byte {
+func (txs *Txs) RlpHash() ([32]byte, error) {
 	return rlpHash(txs)
 }
 
@@ -67,11 +67,17 @@ var hasherPool = sync.Pool{
 	New: func() interface{} { return sha3.NewLegacyKeccak256() },
 }
 
-func rlpHash(x interface{}) (h common.Hash) {
+func rlpHash(x interface{}) (h common.Hash, err error) {
 	sha := hasherPool.Get().(crypto.KeccakState)
 	defer hasherPool.Put(sha)
 	sha.Reset()
-	rlp.Encode(sha, x)
-	sha.Read(h[:])
-	return h
+	err = rlp.Encode(sha, x)
+	if err != nil {
+		return h, err
+	}
+	_, err = sha.Read(h[:])
+	if err != nil {
+		return h, err
+	}
+	return h, nil
 }
