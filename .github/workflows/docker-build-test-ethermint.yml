@@ -14,6 +14,9 @@ env:
   IMAGE_NAME: astriaorg/ethermint
   TAG_PREFIX: rollmint-eth-hashes-
 
+permissions:
+  packages: write
+
 jobs:
   docker-build:
     if: github.event.pull_request.head.repo.full_name == github.repository
