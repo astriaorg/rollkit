@@ -3,7 +3,7 @@ name: docker-build-test-ethermint
 on:
   push:
     branches:
-      - main
+      - eth-hashes
   pull_request:
   release:
     types: [published]
