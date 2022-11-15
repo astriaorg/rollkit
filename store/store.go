@@ -2,10 +2,12 @@ package store
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync/atomic"
 
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	tmstate "github.com/tendermint/tendermint/proto/tendermint/state"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	tmtypes "github.com/tendermint/tendermint/types"
@@ -55,8 +57,22 @@ func (s *DefaultStore) Height() uint64 {
 
 // SaveBlock adds block to the store along with corresponding commit.
 // Stored height is updated if block height is greater than stored value.
-func (s *DefaultStore) SaveBlock(block *types.Block, commit *types.Commit) error {
-	hash := block.Header.Hash()
+func (s *DefaultStore) SaveBlock(block *types.Block, commit *types.Commit, responses *tmstate.ABCIResponses) error {
+	ethHeader, err := block.ToEthHeader(responses)
+	if err != nil {
+		return fmt.Errorf("failed to convert optimint header to eth header: %w", err)
+	}
+	fmt.Println("SaveBlock TM ParentHash: ", hexutil.Bytes(block.Header.LastHeaderHash[:]))
+	fmt.Println("SaveBlock Eth ParentHash: ", ethHeader.ParentHash)
+
+	ethHeaderJSON, err := json.MarshalIndent(ethHeader, "", "  ")
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("SaveBlock header: %s\n", string(ethHeaderJSON))
+	hash := ethHeader.Hash()
+	fmt.Printf("SaveBlock height: %d hash: %s\n", ethHeader.Number, hash)
+
 	blockBlob, err := block.MarshalBinary()
 	if err != nil {
 		return fmt.Errorf("failed to marshal Block to binary: %w", err)

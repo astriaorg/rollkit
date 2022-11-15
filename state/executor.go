@@ -15,6 +15,9 @@ import (
 	tmtypes "github.com/tendermint/tendermint/types"
 	"go.uber.org/multierr"
 
+	"github.com/ethereum/go-ethereum/common"
+	ethtypes "github.com/ethereum/go-ethereum/core/types"
+
 	abciconv "github.com/celestiaorg/rollmint/conv/abci"
 	"github.com/celestiaorg/rollmint/log"
 	"github.com/celestiaorg/rollmint/mempool"
@@ -89,6 +92,17 @@ func (e *BlockExecutor) CreateBlock(height uint64, lastCommit *types.Commit, las
 	maxGas := state.ConsensusParams.Block.MaxGas
 
 	mempoolTxs := e.mempool.ReapMaxBytesMaxGas(maxBytes, maxGas)
+	var txHash common.Hash
+	if len(mempoolTxs) == 0 {
+		txHash = ethtypes.EmptyRootHash
+	} else {
+		rollTxs := toRollmintTxs(mempoolTxs)
+		rlpHash, err := rollTxs.RlpHash()
+		if err != nil {
+			e.logger.Info("failed to get hash of txs", "error", err)
+		}
+		copy(txHash[:], rlpHash[:])
+	}
 
 	block := &types.Block{
 		Header: types.Header{
@@ -101,7 +115,7 @@ func (e *BlockExecutor) CreateBlock(height uint64, lastCommit *types.Commit, las
 			Time:           uint64(time.Now().Unix()), // TODO(tzdybal): how to get TAI64?
 			LastHeaderHash: lastHeaderHash,
 			//LastCommitHash:  lastCommitHash,
-			DataHash:        [32]byte{},
+			DataHash:        txHash,
 			ConsensusHash:   [32]byte{},
 			AppHash:         state.AppHash,
 			LastResultsHash: state.LastResultsHash,
@@ -290,7 +304,10 @@ func (e *BlockExecutor) execute(ctx context.Context, state types.State, block *t
 		}
 	})
 
-	hash := block.Hash()
+	hash, err := block.RlpHash()
+	if err != nil {
+		return nil, err
+	}
 	abciHeader, err := abciconv.ToABCIHeaderPB(&block.Header)
 	if err != nil {
 		return nil, err

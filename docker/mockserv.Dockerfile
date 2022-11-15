@@ -5,7 +5,8 @@ WORKDIR /src
 
 COPY . .
 
-RUN go mod tidy -compat=1.19 && \ 
+RUN apk add build-base && \
+    go mod tidy -compat=1.19 && \ 
     go build /src/da/grpc/mockserv/cmd/main.go
 
 # Final image

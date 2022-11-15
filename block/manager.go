@@ -2,6 +2,7 @@ package block
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -11,6 +12,7 @@ import (
 	abci "github.com/tendermint/tendermint/abci/types"
 	tmcrypto "github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/merkle"
+	tmstate "github.com/tendermint/tendermint/proto/tendermint/state"
 	"github.com/tendermint/tendermint/proxy"
 	tmtypes "github.com/tendermint/tendermint/types"
 	"go.uber.org/multierr"
@@ -216,15 +218,19 @@ func (m *Manager) SyncLoop(ctx context.Context) {
 		case blockEvent := <-m.blockInCh:
 			block := blockEvent.block
 			daHeight := blockEvent.daHeight
+			hash, err := block.RlpHash()
+			if err != nil {
+				m.logger.Info("failed to get hash of block", "error", err)
+			}
 			m.logger.Debug("block body retrieved from DALC",
 				"height", block.Header.Height,
 				"daHeight", daHeight,
-				"hash", block.Hash(),
+				"hash", hash,
 			)
 			m.syncCache[block.Header.Height] = block
 			m.retrieveCond.Signal()
 
-			err := m.trySyncNextBlock(ctx, daHeight)
+			err = m.trySyncNextBlock(ctx, daHeight)
 			if err != nil {
 				m.logger.Info("failed to sync next block", "error", err)
 			}
@@ -266,7 +272,7 @@ func (m *Manager) trySyncNextBlock(ctx context.Context, daHeight uint64) error {
 		if err != nil {
 			return fmt.Errorf("failed to ApplyBlock: %w", err)
 		}
-		err = m.store.SaveBlock(b1, commit)
+		err = m.store.SaveBlock(b1, commit, responses)
 		if err != nil {
 			return fmt.Errorf("failed to save block: %w", err)
 		}
@@ -403,11 +409,30 @@ func (m *Manager) publishBlock(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("error while loading last block: %w", err)
 		}
-		lastHeaderHash = lastBlock.Header.Hash()
+		blockResp, err := m.store.LoadBlockResponses(height)
+		if err != nil {
+			return fmt.Errorf("error loading last block responses: %w", err)
+		}
+		lastBlockEthHeader, err := lastBlock.ToEthHeader(blockResp)
+		if err != nil {
+			return fmt.Errorf("error convering last block to ethHeader: %w", err)
+		}
+		fmt.Println("loadblock parentHash: ", lastBlockEthHeader.ParentHash)
+		fmt.Println("loadblock txRoot: ", lastBlockEthHeader.TxHash)
+
+		ethHeaderJSON, err := json.MarshalIndent(lastBlockEthHeader, "", "  ")
+		if err != nil {
+			panic(err)
+		}
+		fmt.Printf("publishBlock header: %s\n", string(ethHeaderJSON))
+		lastHeaderHash = lastBlockEthHeader.Hash()
+		fmt.Println("publishBlock lastHeaderHash: ", lastBlockEthHeader.Hash())
 	}
 
 	var block *types.Block
 	var commit *types.Commit
+	var newState types.State
+	var responses *tmstate.ABCIResponses
 
 	// Check if there's an already stored block at a newer height
 	// If there is use that instead of creating a new block
@@ -415,6 +440,11 @@ func (m *Manager) publishBlock(ctx context.Context) error {
 	if err == nil {
 		m.logger.Info("Using pending block", "height", newHeight)
 		block = pendingBlock
+
+		newState, responses, err = m.executor.ApplyBlock(ctx, m.lastState, block)
+		if err != nil {
+			return err
+		}
 	} else {
 		m.logger.Info("Creating and publishing block", "height", newHeight)
 		block = m.executor.CreateBlock(newHeight, lastCommit, lastHeaderHash, m.lastState)
@@ -434,17 +464,16 @@ func (m *Manager) publishBlock(ctx context.Context) error {
 			Signatures: []types.Signature{sign},
 		}
 
-		// SaveBlock commits the DB tx
-		err = m.store.SaveBlock(block, commit)
+		newState, responses, err = m.executor.ApplyBlock(ctx, m.lastState, block)
 		if err != nil {
 			return err
 		}
-	}
 
-	// Apply the block but DONT commit
-	newState, responses, err := m.executor.ApplyBlock(ctx, m.lastState, block)
-	if err != nil {
-		return err
+		// SaveBlock commits the DB tx
+		err = m.store.SaveBlock(block, commit, responses)
+		if err != nil {
+			return err
+		}
 	}
 
 	err = m.submitBlockToDA(ctx, block)

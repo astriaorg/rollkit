@@ -3,20 +3,20 @@ name: docker-build-ethermint-debug
 on:
   push:
     branches:
-      - main
+      - eth-hashes
   pull_request:
-  release:
-    types: [published]
   workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: celestiaorg/ethermint-debug
-  TAG_PREFIX: rollmint-
+  IMAGE_NAME: astriaorg/ethermint-debug
+  TAG_PREFIX: rollmint-eth-hashes-
+
+permissions:
+  packages: write
 
 jobs:
   docker-build:
-    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: "ubuntu-latest"
     permissions:
       contents: write 
@@ -27,14 +27,15 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v3
         with:
-          go-version: 1.17
+          go-version: 1.19
       - name: up a level
         run: cd .. && pwd
       - name: Clone ethermint repo
         uses: actions/checkout@v3
         with:
-          repository: celestiaorg/ethermint
+          repository: astriaorg/ethermint
           path: ethermint
+          ref: eth-hashes
       - name: Move Stuff and Tidy
         run: |
           ls
@@ -44,7 +45,7 @@ jobs:
           cd ethermint
           rm -rf .git
           go mod edit -replace=github.com/celestiaorg/rollmint=./rollmint
-          go mod tidy -compat=1.17 -e
+          go mod tidy -compat=1.19 -e
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v4
@@ -52,8 +53,6 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=sha,prefix=${{ env.TAG_PREFIX }}
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
       - name: Login to GHCR
@@ -66,7 +65,7 @@ jobs:
         uses: docker/build-push-action@v3
         with:
           context: ../ethermint
-          platforms: linux/amd64, linux/arm64
+          platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           file: ../ethermint/docker/debug.Dockerfile

@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -413,14 +414,33 @@ func (c *Client) Block(ctx context.Context, height *int64) (*ctypes.ResultBlock,
 	if err != nil {
 		return nil, err
 	}
-	hash := block.Hash()
+	blockResp, err := c.node.Store.LoadBlockResponses(heightValue)
+	if err != nil {
+		return nil, err
+	}
+	ethBlockHeader, err := block.ToEthHeader(blockResp)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println("loadblock parentHash: ", ethBlockHeader.ParentHash)
+	fmt.Println("loadblock txRoot: ", ethBlockHeader.TxHash)
+
+	ethHeaderJSON, err := json.MarshalIndent(ethBlockHeader, "", "  ")
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("loadblock header: %s\n", string(ethHeaderJSON))
+
+	hash := ethBlockHeader.Hash()
+	fmt.Println("loadblock ethHash: ", hash)
 	abciBlock, err := abciconv.ToABCIBlock(block)
 	if err != nil {
 		return nil, err
 	}
+	abciBlock.DataHash = ethBlockHeader.TxHash.Bytes()
 	return &ctypes.ResultBlock{
 		BlockID: types.BlockID{
-			Hash: hash[:],
+			Hash: hash.Bytes(),
 			PartSetHeader: types.PartSetHeader{
 				Total: 0,
 				Hash:  nil,
@@ -439,6 +459,25 @@ func (c *Client) BlockByHash(ctx context.Context, hash []byte) (*ctypes.ResultBl
 	if err != nil {
 		return nil, err
 	}
+	blockResp, err := c.node.Store.LoadBlockResponses(block.Header.Height)
+	if err != nil {
+		return nil, err
+	}
+	ethBlockHeader, err := block.ToEthHeader(blockResp)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println("loadblock parentHash: ", ethBlockHeader.ParentHash)
+	fmt.Println("loadblock txRoot: ", ethBlockHeader.TxHash)
+
+	ethHeaderJSON, err := json.MarshalIndent(ethBlockHeader, "", "  ")
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("loadblock header: %s\n", string(ethHeaderJSON))
+
+	ethHash := ethBlockHeader.Hash()
+	fmt.Println("loadblock ethHash: ", ethHash)
 
 	abciBlock, err := abciconv.ToABCIBlock(block)
 	if err != nil {
@@ -446,7 +485,7 @@ func (c *Client) BlockByHash(ctx context.Context, hash []byte) (*ctypes.ResultBl
 	}
 	return &ctypes.ResultBlock{
 		BlockID: types.BlockID{
-			Hash: h[:],
+			Hash: ethHash.Bytes(),
 			PartSetHeader: types.PartSetHeader{
 				Total: 0,
 				Hash:  nil,
@@ -677,10 +716,14 @@ func (c *Client) BlockSearch(ctx context.Context, query string, page, perPage *i
 		if err != nil {
 			return nil, err
 		}
+		rlpHash, err := b.RlpHash()
+		if err != nil {
+			return nil, err
+		}
 		blocks = append(blocks, &ctypes.ResultBlock{
 			Block: block,
 			BlockID: types.BlockID{
-				Hash: block.Hash(),
+				Hash: rlpHash[:],
 			},
 		})
 	}
