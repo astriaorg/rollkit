@@ -15,12 +15,13 @@ import (
 	tmtypes "github.com/tendermint/tendermint/types"
 	"go.uber.org/multierr"
 
+	"github.com/ethereum/go-ethereum/common"
+	ethtypes "github.com/ethereum/go-ethereum/core/types"
+
 	abciconv "github.com/celestiaorg/rollmint/conv/abci"
 	"github.com/celestiaorg/rollmint/log"
 	"github.com/celestiaorg/rollmint/mempool"
 	"github.com/celestiaorg/rollmint/types"
-	"github.com/ethereum/go-ethereum/common"
-	ethtypes "github.com/ethereum/go-ethereum/core/types"
 )
 
 // BlockExecutor creates and applies blocks and maintains state.
