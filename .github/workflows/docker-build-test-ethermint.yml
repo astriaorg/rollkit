@@ -11,8 +11,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: celestiaorg/ethermint
-  TAG_PREFIX: rollmint-
+  IMAGE_NAME: astria/ethermint
+  TAG_PREFIX: rollmint-eth-hashes-
 
 jobs:
   docker-build:
@@ -35,7 +35,7 @@ jobs:
       - name: Clone ethermint repo
         uses: actions/checkout@v3
         with:
-          repository: celestiaorg/ethermint
+          repository: astriaorg/ethermint
           path: ethermint
           ref: eth-hashes
       - name: Move Stuff and Tidy
