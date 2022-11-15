@@ -11,11 +11,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: astria/ethermint
+  IMAGE_NAME: astriaorg/ethermint
   TAG_PREFIX: rollmint-eth-hashes-
-
-permissions:
-  packages: write
 
 jobs:
   docker-build:
