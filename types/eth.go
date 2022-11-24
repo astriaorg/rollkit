@@ -66,6 +66,21 @@ func (b *Block) ToEthHeader(responses *tmstate.ABCIResponses) (*ethtypes.Header,
 	ethHeader.TxHash = txRoot
 	// b.Header.DataHash = txRoot
 
+	var receiptHash common.Hash
+	for _, event := range responses.EndBlock.Events {
+		if event.Type != "receipt_hash" {
+			continue
+		}
+		for _, attr := range event.Attributes {
+			if bytes.Equal(attr.Key, []byte("ethReceiptHash")) {
+				receiptHash = common.HexToHash(string(attr.Value))
+				break
+			}
+		}
+	}
+	fmt.Println("SaveBlock receiptHash: ", receiptHash)
+	ethHeader.ReceiptHash = receiptHash
+
 	var bloom ethtypes.Bloom
 	for _, event := range responses.EndBlock.Events {
 		if event.Type != "block_bloom" {
