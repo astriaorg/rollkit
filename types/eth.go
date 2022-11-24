@@ -32,6 +32,7 @@ func (b *Block) ToEthHeader(responses *tmstate.ABCIResponses) (*ethtypes.Header,
 		ReceiptHash: ethtypes.EmptyRootHash,
 		BaseFee:     big.NewInt(0),
 	}
+	var err error
 
 	var txRoot common.Hash
 	for _, event := range responses.EndBlock.Events {
