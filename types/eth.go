@@ -2,12 +2,14 @@ package types
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"math/big"
 	"strconv"
 	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 
 	tmstate "github.com/tendermint/tendermint/proto/tendermint/state"
@@ -15,24 +17,38 @@ import (
 
 func (b *Block) ToEthHeader(responses *tmstate.ABCIResponses) (*ethtypes.Header, error) {
 	h := b.Header
-	ethHeader := ethtypes.Header{
-		Number:      new(big.Int).SetUint64(h.Height),
-		ParentHash:  common.BytesToHash(h.LastHeaderHash[:]),
-		Nonce:       ethtypes.BlockNonce{},   // PoW specific
-		UncleHash:   ethtypes.EmptyUncleHash, // No uncles in Tendermint
-		Bloom:       ethtypes.Bloom{},
-		Coinbase:    common.BytesToAddress(h.ProposerAddress),
-		MixDigest:   common.Hash{},
-		Difficulty:  big.NewInt(0),
-		Extra:       []byte("0x"),
-		GasLimit:    uint64(0),
-		GasUsed:     uint64(0),
-		Time:        h.Time,
-		TxHash:      common.BytesToHash(h.DataHash[:]),
-		ReceiptHash: ethtypes.EmptyRootHash,
-		BaseFee:     big.NewInt(0),
+	tmHash := h.Hash()
+	temp := map[string]interface{}{
+		"number":           hexutil.Uint64(h.Height),
+		"tm_hash":          hexutil.Bytes(tmHash[:]),
+		"parentHash":       common.BytesToHash(h.LastHeaderHash[:]),
+		"nonce":            ethtypes.BlockNonce{},   // PoW specific
+		"sha3Uncles":       ethtypes.EmptyUncleHash, // No uncles in Tendermint
+		"stateRoot":        hexutil.Bytes(h.AppHash[:]),
+		"logsBloom":        ethtypes.Bloom{},
+		"miner":            hexutil.Bytes(h.ProposerAddress),
+		"mixHash":          common.Hash{},
+		"difficulty":       (*hexutil.Big)(big.NewInt(0)),
+		"extraData":        "0x",
+		"size":             hexutil.Uint64(0),
+		"gasLimit":         hexutil.Uint64(0),
+		"gasUsed":          hexutil.Uint64(0),
+		"timestamp":        hexutil.Uint64(h.Time),
+		"transactionsRoot": common.BytesToHash(h.DataHash[:]),
+		"receiptsRoot":     ethtypes.EmptyRootHash,
+		"uncles":           []common.Hash{},
+		"totalDifficulty":  (*hexutil.Big)(big.NewInt(0)),
+		"baseFeePerGas":    (*hexutil.Big)(big.NewInt(0)),
 	}
-	var err error
+	blockJson, err := json.Marshal(temp)
+	if err != nil {
+		return nil, err
+	}
+	var ethHeader ethtypes.Header
+	err = json.Unmarshal(blockJson, &ethHeader)
+	if err != nil {
+		return nil, err
+	}
 
 	var txRoot common.Hash
 	for _, event := range responses.EndBlock.Events {
