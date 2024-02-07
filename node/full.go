@@ -2,7 +2,9 @@ package node
 
 import (
 	"context"
+	"crypto/ed25519"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,8 +15,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 
 	abci "github.com/cometbft/cometbft/abci/types"
 	llcfg "github.com/cometbft/cometbft/config"
@@ -25,10 +25,11 @@ import (
 	rpcclient "github.com/cometbft/cometbft/rpc/client"
 	cmtypes "github.com/cometbft/cometbft/types"
 
-	goDAProxy "github.com/rollkit/go-da/proxy"
+	"github.com/rollkit/rollkit/astria/execution"
+	astriamempool "github.com/rollkit/rollkit/astria/mempool"
+	"github.com/rollkit/rollkit/astria/sequencer"
 	"github.com/rollkit/rollkit/block"
 	"github.com/rollkit/rollkit/config"
-	"github.com/rollkit/rollkit/da"
 	"github.com/rollkit/rollkit/mempool"
 	"github.com/rollkit/rollkit/p2p"
 	"github.com/rollkit/rollkit/state"
@@ -66,17 +67,18 @@ type FullNode struct {
 
 	nodeConfig config.NodeConfig
 
-	proxyApp     proxy.AppConns
-	eventBus     *cmtypes.EventBus
-	dalc         *da.DAClient
-	p2pClient    *p2p.Client
-	hSyncService *block.HeaderSyncService
-	bSyncService *block.BlockSyncService
+	proxyApp proxy.AppConns
+	eventBus *cmtypes.EventBus
+	// dalc         *da.DAClient
+	// p2pClient    *p2p.Client
+	// hSyncService *block.HeaderSyncService
+	// bSyncService *block.BlockSyncService
+
 	// TODO(tzdybal): consider extracting "mempool reactor"
 	Mempool      mempool.Mempool
 	mempoolIDs   *mempoolIDs
 	Store        store.Store
-	blockManager *block.Manager
+	BlockManager *block.SSManager
 	client       rpcclient.Client
 
 	// Preserves cometBFT compatibility
@@ -90,6 +92,10 @@ type FullNode struct {
 	ctx           context.Context
 	cancel        context.CancelFunc
 	threadManager *types.ThreadManager
+
+	// astria added
+	reaper            *astriamempool.MempoolReaper
+	grpcServerHandler *execution.GRPCServerHandler
 }
 
 // newFullNode creates a new Rollkit full node.
@@ -113,7 +119,7 @@ func newFullNode(
 		}
 	}()
 
-	seqMetrics, p2pMetrics, memplMetrics, smMetrics, abciMetrics := metricsProvider(genesis.ChainID)
+	seqMetrics, _, memplMetrics, smMetrics, abciMetrics := metricsProvider(genesis.ChainID)
 
 	proxyApp, err := initProxyApp(clientCreator, logger, abciMetrics)
 	if err != nil {
@@ -130,32 +136,33 @@ func newFullNode(
 		return nil, err
 	}
 
-	dalcKV := newPrefixKV(baseKV, dalcPrefix)
-	dalc, err := initDALC(nodeConfig, dalcKV, logger)
-	if err != nil {
-		return nil, err
-	}
+	// dalcKV := newPrefixKV(baseKV, dalcPrefix)
+	// dalc, err := initDALC(nodeConfig, dalcKV, logger)
+	// if err != nil {
+	// 	return nil, err
+	// }
 
-	p2pClient, err := p2p.NewClient(nodeConfig.P2P, p2pKey, genesis.ChainID, baseKV, logger.With("module", "p2p"), p2pMetrics)
-	if err != nil {
-		return nil, err
-	}
+	// p2pClient, err := p2p.NewClient(nodeConfig.P2P, p2pKey, genesis.ChainID, baseKV, logger.With("module", "p2p"), p2pMetrics)
+	// if err != nil {
+	// 	return nil, err
+	// }
 
 	mainKV := newPrefixKV(baseKV, mainPrefix)
-	headerSyncService, err := initHeaderSyncService(ctx, mainKV, nodeConfig, genesis, p2pClient, logger)
-	if err != nil {
-		return nil, err
-	}
 
-	blockSyncService, err := initBlockSyncService(ctx, mainKV, nodeConfig, genesis, p2pClient, logger)
-	if err != nil {
-		return nil, err
-	}
+	// headerSyncService, err := initHeaderSyncService(ctx, mainKV, nodeConfig, genesis, p2pClient, logger)
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	// blockSyncService, err := initBlockSyncService(ctx, mainKV, nodeConfig, genesis, p2pClient, logger)
+	// if err != nil {
+	// 	return nil, err
+	// }
 
 	mempool := initMempool(logger, proxyApp, memplMetrics)
 
 	store := store.New(mainKV)
-	blockManager, err := initBlockManager(signingKey, nodeConfig, genesis, store, mempool, proxyApp, dalc, eventBus, logger, blockSyncService, seqMetrics, smMetrics)
+	blockManager, err := initBlockManager(signingKey, nodeConfig, genesis, store, mempool, proxyApp, eventBus, logger, seqMetrics, smMetrics)
 	if err != nil {
 		return nil, err
 	}
@@ -166,29 +173,47 @@ func newFullNode(
 		return nil, err
 	}
 
+	// init mempool reaper
+	sequencerAddr := ""
+	privateKeyBytes, err := hex.DecodeString("your_private_key_in_hex")
+	if err != nil {
+		return nil, err
+	}
+	private := ed25519.PrivateKey(privateKeyBytes)
+	seqClient := sequencer.NewClient(sequencerAddr, private, genesis.ChainID)
+	reaper := astriamempool.NewMempoolReaper(seqClient, mempool)
+
+	// init grpc execution api
+	executionAddr := ":50051"
+	serviceV1a2 := execution.NewExecutionServiceServerV1Alpha2(blockManager, store, logger)
+	grpcServerHandler := execution.NewGRPCServerHandler(serviceV1a2, executionAddr)
+
 	node := &FullNode{
-		proxyApp:       proxyApp,
-		eventBus:       eventBus,
-		genesis:        genesis,
-		nodeConfig:     nodeConfig,
-		p2pClient:      p2pClient,
-		blockManager:   blockManager,
-		dalc:           dalc,
+		proxyApp:   proxyApp,
+		eventBus:   eventBus,
+		genesis:    genesis,
+		nodeConfig: nodeConfig,
+		// p2pClient:      p2pClient,
+		BlockManager: blockManager,
+		// dalc:           dalc,
 		Mempool:        mempool,
 		mempoolIDs:     newMempoolIDs(),
 		Store:          store,
 		TxIndexer:      txIndexer,
 		IndexerService: indexerService,
 		BlockIndexer:   blockIndexer,
-		hSyncService:   headerSyncService,
-		bSyncService:   blockSyncService,
-		ctx:            ctx,
-		cancel:         cancel,
-		threadManager:  types.NewThreadManager(),
+		// hSyncService:   headerSyncService,
+		// bSyncService:   blockSyncService,
+		ctx:           ctx,
+		cancel:        cancel,
+		threadManager: types.NewThreadManager(),
+
+		reaper:            reaper,
+		grpcServerHandler: grpcServerHandler,
 	}
 
 	node.BaseService = *service.NewBaseService(logger, "Node", node)
-	node.p2pClient.SetTxValidator(node.newTxValidator(p2pMetrics))
+	// node.p2pClient.SetTxValidator(node.newTxValidator(p2pMetrics))
 	node.client = NewFullClient(node)
 
 	return node, nil
@@ -221,14 +246,14 @@ func initBaseKV(nodeConfig config.NodeConfig, logger log.Logger) (ds.TxnDatastor
 	return store.NewDefaultKVStore(nodeConfig.RootDir, nodeConfig.DBPath, "rollkit")
 }
 
-func initDALC(nodeConfig config.NodeConfig, dalcKV ds.TxnDatastore, logger log.Logger) (*da.DAClient, error) {
-	daClient := goDAProxy.NewClient()
-	err := daClient.Start(nodeConfig.DAAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		return nil, fmt.Errorf("error while establishing GRPC connection to DA layer: %w", err)
-	}
-	return &da.DAClient{DA: daClient, GasPrice: nodeConfig.DAGasPrice, Logger: logger.With("module", "da_client")}, nil
-}
+// func initDALC(nodeConfig config.NodeConfig, dalcKV ds.TxnDatastore, logger log.Logger) (*da.DAClient, error) {
+// 	daClient := goDAProxy.NewClient()
+// 	err := daClient.Start(nodeConfig.DAAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+// 	if err != nil {
+// 		return nil, fmt.Errorf("error while establishing GRPC connection to DA layer: %w", err)
+// 	}
+// 	return &da.DAClient{DA: daClient, GasPrice: nodeConfig.DAGasPrice, Logger: logger.With("module", "da_client")}, nil
+// }
 
 func initMempool(logger log.Logger, proxyApp proxy.AppConns, memplMetrics *mempool.Metrics) *mempool.CListMempool {
 	mempool := mempool.NewCListMempool(llcfg.DefaultMempoolConfig(), proxyApp.Mempool(), 0, mempool.WithMetrics(memplMetrics))
@@ -236,24 +261,24 @@ func initMempool(logger log.Logger, proxyApp proxy.AppConns, memplMetrics *mempo
 	return mempool
 }
 
-func initHeaderSyncService(ctx context.Context, mainKV ds.TxnDatastore, nodeConfig config.NodeConfig, genesis *cmtypes.GenesisDoc, p2pClient *p2p.Client, logger log.Logger) (*block.HeaderSyncService, error) {
-	headerSyncService, err := block.NewHeaderSyncService(ctx, mainKV, nodeConfig, genesis, p2pClient, logger.With("module", "HeaderSyncService"))
-	if err != nil {
-		return nil, fmt.Errorf("error while initializing HeaderSyncService: %w", err)
-	}
-	return headerSyncService, nil
-}
+// func initHeaderSyncService(ctx context.Context, mainKV ds.TxnDatastore, nodeConfig config.NodeConfig, genesis *cmtypes.GenesisDoc, p2pClient *p2p.Client, logger log.Logger) (*block.HeaderSyncService, error) {
+// 	headerSyncService, err := block.NewHeaderSyncService(ctx, mainKV, nodeConfig, genesis, p2pClient, logger.With("module", "HeaderSyncService"))
+// 	if err != nil {
+// 		return nil, fmt.Errorf("error while initializing HeaderSyncService: %w", err)
+// 	}
+// 	return headerSyncService, nil
+// }
 
-func initBlockSyncService(ctx context.Context, mainKV ds.TxnDatastore, nodeConfig config.NodeConfig, genesis *cmtypes.GenesisDoc, p2pClient *p2p.Client, logger log.Logger) (*block.BlockSyncService, error) {
-	blockSyncService, err := block.NewBlockSyncService(ctx, mainKV, nodeConfig, genesis, p2pClient, logger.With("module", "BlockSyncService"))
-	if err != nil {
-		return nil, fmt.Errorf("error while initializing HeaderSyncService: %w", err)
-	}
-	return blockSyncService, nil
-}
+// func initBlockSyncService(ctx context.Context, mainKV ds.TxnDatastore, nodeConfig config.NodeConfig, genesis *cmtypes.GenesisDoc, p2pClient *p2p.Client, logger log.Logger) (*block.BlockSyncService, error) {
+// 	blockSyncService, err := block.NewBlockSyncService(ctx, mainKV, nodeConfig, genesis, p2pClient, logger.With("module", "BlockSyncService"))
+// 	if err != nil {
+// 		return nil, fmt.Errorf("error while initializing HeaderSyncService: %w", err)
+// 	}
+// 	return blockSyncService, nil
+// }
 
-func initBlockManager(signingKey crypto.PrivKey, nodeConfig config.NodeConfig, genesis *cmtypes.GenesisDoc, store store.Store, mempool mempool.Mempool, proxyApp proxy.AppConns, dalc *da.DAClient, eventBus *cmtypes.EventBus, logger log.Logger, blockSyncService *block.BlockSyncService, seqMetrics *block.Metrics, execMetrics *state.Metrics) (*block.Manager, error) {
-	blockManager, err := block.NewManager(signingKey, nodeConfig.BlockManagerConfig, genesis, store, mempool, proxyApp.Consensus(), dalc, eventBus, logger.With("module", "BlockManager"), blockSyncService.BlockStore(), seqMetrics, execMetrics)
+func initBlockManager(signingKey crypto.PrivKey, nodeConfig config.NodeConfig, genesis *cmtypes.GenesisDoc, store store.Store, mempool mempool.Mempool, proxyApp proxy.AppConns, eventBus *cmtypes.EventBus, logger log.Logger, seqMetrics *block.Metrics, execMetrics *state.Metrics) (*block.SSManager, error) {
+	blockManager, err := block.NewSSManager(signingKey, nodeConfig.BlockManagerConfig, genesis, store, mempool, proxyApp.Consensus(), eventBus, logger.With("module", "BlockManager"), seqMetrics, execMetrics)
 	if err != nil {
 		return nil, fmt.Errorf("error while initializing BlockManager: %w", err)
 	}
@@ -287,38 +312,6 @@ func (n *FullNode) initGenesisChunks() error {
 	}
 
 	return nil
-}
-
-func (n *FullNode) headerPublishLoop(ctx context.Context) {
-	for {
-		select {
-		case signedHeader := <-n.blockManager.HeaderCh:
-			err := n.hSyncService.WriteToHeaderStoreAndBroadcast(ctx, signedHeader)
-			if err != nil {
-				// failed to init or start headerstore
-				n.Logger.Error(err.Error())
-				return
-			}
-		case <-ctx.Done():
-			return
-		}
-	}
-}
-
-func (n *FullNode) blockPublishLoop(ctx context.Context) {
-	for {
-		select {
-		case block := <-n.blockManager.BlockCh:
-			err := n.bSyncService.WriteToBlockStoreAndBroadcast(ctx, block)
-			if err != nil {
-				// failed to init or start blockstore
-				n.Logger.Error(err.Error())
-				return
-			}
-		case <-ctx.Done():
-			return
-		}
-	}
 }
 
 // GetClient returns the RPC client for the full node.
@@ -359,31 +352,35 @@ func (n *FullNode) OnStart() error {
 	if n.nodeConfig.Instrumentation != nil && n.nodeConfig.Instrumentation.IsPrometheusEnabled() {
 		n.prometheusSrv = n.startPrometheusServer()
 	}
-	n.Logger.Info("starting P2P client")
-	err := n.p2pClient.Start(n.ctx)
-	if err != nil {
-		return fmt.Errorf("error while starting P2P client: %w", err)
-	}
 
-	if err = n.hSyncService.Start(); err != nil {
-		return fmt.Errorf("error while starting header sync service: %w", err)
-	}
+	// n.Logger.Info("starting P2P client")
+	// err := n.p2pClient.Start(n.ctx)
+	// if err != nil {
+	// 	return fmt.Errorf("error while starting P2P client: %w", err)
+	// }
 
-	if err = n.bSyncService.Start(); err != nil {
-		return fmt.Errorf("error while starting block sync service: %w", err)
-	}
+	// if err = n.hSyncService.Start(); err != nil {
+	// 	return fmt.Errorf("error while starting header sync service: %w", err)
+	// }
 
-	if n.nodeConfig.Aggregator {
-		n.Logger.Info("working in aggregator mode", "block time", n.nodeConfig.BlockTime)
-		n.threadManager.Go(func() { n.blockManager.AggregationLoop(n.ctx, n.nodeConfig.LazyAggregator) })
-		n.threadManager.Go(func() { n.blockManager.BlockSubmissionLoop(n.ctx) })
-		n.threadManager.Go(func() { n.headerPublishLoop(n.ctx) })
-		n.threadManager.Go(func() { n.blockPublishLoop(n.ctx) })
-		return nil
-	}
-	n.threadManager.Go(func() { n.blockManager.RetrieveLoop(n.ctx) })
-	n.threadManager.Go(func() { n.blockManager.BlockStoreRetrieveLoop(n.ctx) })
-	n.threadManager.Go(func() { n.blockManager.SyncLoop(n.ctx, n.cancel) })
+	// if err = n.bSyncService.Start(); err != nil {
+	// 	return fmt.Errorf("error while starting block sync service: %w", err)
+	// }
+
+	n.grpcServerHandler.Start()
+	n.reaper.Start()
+
+	// if n.nodeConfig.Aggregator {
+	// 	n.Logger.Info("working in aggregator mode", "block time", n.nodeConfig.BlockTime)
+	// 	n.threadManager.Go(func() { n.BlockManager.AggregationLoop(n.ctx, n.nodeConfig.LazyAggregator) })
+	// 	n.threadManager.Go(func() { n.BlockManager.BlockSubmissionLoop(n.ctx) })
+	// 	n.threadManager.Go(func() { n.headerPublishLoop(n.ctx) })
+	// 	n.threadManager.Go(func() { n.blockPublishLoop(n.ctx) })
+	// 	return nil
+	// }
+	// n.threadManager.Go(func() { n.BlockManager.RetrieveLoop(n.ctx) })
+	// n.threadManager.Go(func() { n.BlockManager.BlockStoreRetrieveLoop(n.ctx) })
+	// n.threadManager.Go(func() { n.BlockManager.SyncLoop(n.ctx, n.cancel) })
 	return nil
 }
 
@@ -407,11 +404,13 @@ func (n *FullNode) OnStop() {
 	n.cancel()
 	n.threadManager.Wait()
 	n.Logger.Info("shutting down full node sub services...")
-	err := n.p2pClient.Close()
-	err = errors.Join(
-		err,
-		n.hSyncService.Stop(),
-		n.bSyncService.Stop(),
+	// err := n.p2pClient.Close()
+	err := errors.Join(
+		// err,
+		// n.hSyncService.Stop(),
+		// n.bSyncService.Stop(),
+		n.grpcServerHandler.Stop(),
+		n.reaper.Stop(),
 		n.IndexerService.Stop(),
 	)
 	if n.prometheusSrv != nil {

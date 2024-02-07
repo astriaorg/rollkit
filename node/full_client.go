@@ -140,10 +140,10 @@ func (c *FullClient) BroadcastTxCommit(ctx context.Context, tx cmtypes.Tx) (*cty
 	}
 
 	// broadcast tx
-	err = c.node.p2pClient.GossipTx(ctx, tx)
-	if err != nil {
-		return nil, fmt.Errorf("tx added to local mempool but failure to broadcast: %w", err)
-	}
+	// err = c.node.p2pClient.GossipTx(ctx, tx)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("tx added to local mempool but failure to broadcast: %w", err)
+	// }
 
 	// Wait for the tx to be included in a block or timeout.
 	select {
@@ -189,10 +189,10 @@ func (c *FullClient) BroadcastTxAsync(ctx context.Context, tx cmtypes.Tx) (*ctyp
 		return nil, err
 	}
 	// gossipTx optimistically
-	err = c.node.p2pClient.GossipTx(ctx, tx)
-	if err != nil {
-		return nil, fmt.Errorf("tx added to local mempool but failed to gossip: %w", err)
-	}
+	// err = c.node.p2pClient.GossipTx(ctx, tx)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("tx added to local mempool but failed to gossip: %w", err)
+	// }
 	return &ctypes.ResultBroadcastTx{Hash: tx.Hash()}, nil
 }
 
@@ -216,17 +216,17 @@ func (c *FullClient) BroadcastTxSync(ctx context.Context, tx cmtypes.Tx) (*ctype
 	// gossip the transaction if it's in the mempool.
 	// Note: we have to do this here because, unlike the tendermint mempool reactor, there
 	// is no routine that gossips transactions after they enter the pool
-	if res.Code == abci.CodeTypeOK {
-		err = c.node.p2pClient.GossipTx(ctx, tx)
-		if err != nil {
-			// the transaction must be removed from the mempool if it cannot be gossiped.
-			// if this does not occur, then the user will not be able to try again using
-			// this node, as the CheckTx call above will return an error indicating that
-			// the tx is already in the mempool
-			_ = c.node.Mempool.RemoveTxByKey(tx.Key())
-			return nil, fmt.Errorf("failed to gossip tx: %w", err)
-		}
-	}
+	// if res.Code == abci.CodeTypeOK {
+	// 	err = c.node.p2pClient.GossipTx(ctx, tx)
+	// 	if err != nil {
+	// 		// the transaction must be removed from the mempool if it cannot be gossiped.
+	// 		// if this does not occur, then the user will not be able to try again using
+	// 		// this node, as the CheckTx call above will return an error indicating that
+	// 		// the tx is already in the mempool
+	// 		_ = c.node.Mempool.RemoveTxByKey(tx.Key())
+	// 		return nil, fmt.Errorf("failed to gossip tx: %w", err)
+	// 	}
+	// }
 
 	return &ctypes.ResultBroadcastTx{
 		Code:      res.Code,
@@ -348,20 +348,19 @@ func (c *FullClient) NetInfo(ctx context.Context) (*ctypes.ResultNetInfo, error)
 	res := ctypes.ResultNetInfo{
 		Listening: true,
 	}
-	for _, ma := range c.node.p2pClient.Addrs() {
-		res.Listeners = append(res.Listeners, ma.String())
-	}
-	peers := c.node.p2pClient.Peers()
-	res.NPeers = len(peers)
-	for _, peer := range peers {
-		res.Peers = append(res.Peers, ctypes.Peer{
-			NodeInfo:         peer.NodeInfo,
-			IsOutbound:       peer.IsOutbound,
-			ConnectionStatus: peer.ConnectionStatus,
-			RemoteIP:         peer.RemoteIP,
-		})
-	}
-
+	// for _, ma := range c.node.p2pClient.Addrs() {
+	// 	res.Listeners = append(res.Listeners, ma.String())
+	// }
+	// peers := c.node.p2pClient.Peers()
+	// res.NPeers = len(peers)
+	// for _, peer := range peers {
+	// 	res.Peers = append(res.Peers, ctypes.Peer{
+	// 		NodeInfo:         peer.NodeInfo,
+	// 		IsOutbound:       peer.IsOutbound,
+	// 		ConnectionStatus: peer.ConnectionStatus,
+	// 		RemoteIP:         peer.RemoteIP,
+	// 	})
+	// }
 	return &res, nil
 }
 
@@ -733,18 +732,18 @@ func (c *FullClient) Status(ctx context.Context) (*ctypes.ResultStatus, error) {
 		state.Version.Consensus.Block,
 		state.Version.Consensus.App,
 	)
-	id, addr, network, err := c.node.p2pClient.Info()
-	if err != nil {
-		return nil, fmt.Errorf("failed to load node p2p2 info: %w", err)
-	}
+	// id, addr, network, err := c.node.p2pClient.Info()
+	// if err != nil {
+	// 	return nil, fmt.Errorf("failed to load node p2p2 info: %w", err)
+	// }
 	txIndexerStatus := "on"
 
 	result := &ctypes.ResultStatus{
 		NodeInfo: corep2p.DefaultNodeInfo{
 			ProtocolVersion: defaultProtocolVersion,
-			DefaultNodeID:   id,
-			ListenAddr:      addr,
-			Network:         network,
+			DefaultNodeID:   corep2p.ID("/p2p/_testing"),
+			ListenAddr:      "",
+			Network:         "",
 			Version:         rconfig.Version,
 			Moniker:         config.DefaultBaseConfig().Moniker,
 			Other: corep2p.DefaultNodeInfoOther{

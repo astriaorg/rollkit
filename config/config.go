@@ -19,6 +19,10 @@ const (
 	flagTrustedHash    = "rollkit.trusted_hash"
 	flagLazyAggregator = "rollkit.lazy_aggregator"
 	flagDAGasPrice     = "rollkit.da_gas_price"
+
+	flagAstriaGrpcListen = "rollkit.astria_grpc_listen"
+	flagAstriaSeqAddress = "rollkit.astria_seq_addr"
+	flagAstriaSeqPrivate = "rollkit.astria_seq_private"
 )
 
 // NodeConfig stores Rollkit node configuration.
@@ -37,6 +41,8 @@ type NodeConfig struct {
 	LazyAggregator     bool                         `mapstructure:"lazy_aggregator"`
 	Instrumentation    *cmcfg.InstrumentationConfig `mapstructure:"instrumentation"`
 	DAGasPrice         float64                      `mapstructure:"da_gas_price"`
+
+	Astria AstriaSeqConfig
 }
 
 // HeaderConfig allows node to pass the initial trusted header hash to start the header exchange service
@@ -52,6 +58,12 @@ type BlockManagerConfig struct {
 	DABlockTime time.Duration `mapstructure:"da_block_time"`
 	// DAStartHeight allows skipping first DAStartHeight-1 blocks when querying for blocks.
 	DAStartHeight uint64 `mapstructure:"da_start_height"`
+}
+
+type AstriaSeqConfig struct {
+	GrpcListen string `mapstructure:"astria_grpc_listen"`
+	SeqAddress string `mapstructure:"astria_seq_addr"`
+	SeqPrivate string `mapstructure:"astria_seq_private"`
 }
 
 // GetNodeConfig translates Tendermint's configuration into Rollkit configuration.
@@ -94,6 +106,11 @@ func (nc *NodeConfig) GetViperConfig(v *viper.Viper) error {
 	nc.Light = v.GetBool(flagLight)
 	nc.TrustedHash = v.GetString(flagTrustedHash)
 	nc.DAGasPrice = v.GetFloat64(flagDAGasPrice)
+
+	nc.Astria.GrpcListen = v.GetString(flagAstriaGrpcListen)
+	nc.Astria.SeqAddress = v.GetString(flagAstriaSeqAddress)
+	nc.Astria.SeqPrivate = v.GetString(flagAstriaSeqPrivate)
+
 	return nil
 }
 
@@ -111,4 +128,8 @@ func AddFlags(cmd *cobra.Command) {
 	cmd.Flags().Uint64(flagDAStartHeight, def.DAStartHeight, "starting DA block height (for syncing)")
 	cmd.Flags().Bool(flagLight, def.Light, "run light client")
 	cmd.Flags().String(flagTrustedHash, def.TrustedHash, "initial trusted hash to start the header exchange service")
+
+	cmd.Flags().String(flagAstriaGrpcListen, def.Astria.GrpcListen, "Astria gRPC listen address for execution api")
+	cmd.Flags().String(flagAstriaSeqAddress, def.Astria.SeqAddress, "Astria sequencer address")
+	cmd.Flags().String(flagAstriaSeqPrivate, def.Astria.SeqPrivate, "Astria sequencer private key")
 }

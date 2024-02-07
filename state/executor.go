@@ -169,6 +169,83 @@ func (e *BlockExecutor) CreateBlock(height uint64, lastCommit *types.Commit, las
 	return block, nil
 }
 
+func (e *BlockExecutor) CreateBlockFromSeqencer(height uint64, timestamp time.Time, txs types.Txs, lastCommit *types.Commit, lastHeaderHash types.Hash, state types.State) (*types.Block, error) {
+	maxBytes := state.ConsensusParams.Block.MaxBytes
+	emptyMaxBytes := maxBytes == -1
+	if emptyMaxBytes {
+		maxBytes = int64(cmtypes.MaxBlockSizeBytes)
+	}
+
+	block := &types.Block{
+		SignedHeader: types.SignedHeader{
+			Header: types.Header{
+				Version: types.Version{
+					Block: state.Version.Consensus.Block,
+					App:   state.Version.Consensus.App,
+				},
+				BaseHeader: types.BaseHeader{
+					ChainID: e.chainID,
+					Height:  height,
+					Time:    uint64(timestamp.UnixNano()),
+				},
+				//LastHeaderHash: lastHeaderHash,
+				//LastCommitHash:  lastCommitHash,
+				DataHash:        make(types.Hash, 32),
+				ConsensusHash:   make(types.Hash, 32),
+				AppHash:         state.AppHash,
+				LastResultsHash: state.LastResultsHash,
+				ProposerAddress: e.proposerAddress,
+			},
+			Commit: *lastCommit,
+		},
+		Data: types.Data{
+			Txs:                    txs,
+			IntermediateStateRoots: types.IntermediateStateRoots{RawRootsList: nil},
+			// Note: Temporarily remove Evidence #896
+			// Evidence:               types.EvidenceData{Evidence: nil},
+		},
+	}
+
+	rpp, err := e.proxyApp.PrepareProposal(
+		context.TODO(),
+		&abci.RequestPrepareProposal{
+			MaxTxBytes: maxBytes,
+			Txs:        txs.ToSliceOfBytes(),
+			LocalLastCommit: abci.ExtendedCommitInfo{
+				Round: 0,
+				Votes: []abci.ExtendedVoteInfo{},
+			},
+			Misbehavior:        []abci.Misbehavior{},
+			Height:             int64(block.Height()),
+			Time:               block.Time(),
+			NextValidatorsHash: nil,
+			ProposerAddress:    e.proposerAddress,
+		},
+	)
+	if err != nil {
+		// The App MUST ensure that only valid (and hence 'processable') transactions
+		// enter the mempool. Hence, at this point, we can't have any non-processable
+		// transaction causing an error.
+		//
+		// Also, the App can simply skip any transaction that could cause any kind of trouble.
+		// Either way, we cannot recover in a meaningful way, unless we skip proposing
+		// this block, repair what caused the error and try again. Hence, we return an
+		// error for now (the production code calling this function is expected to panic).
+		return nil, err
+	}
+
+	txl := cmtypes.ToTxs(rpp.Txs)
+	if err := txl.Validate(maxBytes); err != nil {
+		return nil, err
+	}
+
+	block.Data.Txs = toRollkitTxs(txl)
+	block.SignedHeader.LastCommitHash = lastCommit.GetCommitHash(&block.SignedHeader.Header, e.proposerAddress)
+	block.SignedHeader.LastHeaderHash = lastHeaderHash
+
+	return block, nil
+}
+
 // ProcessProposal calls the corresponding ABCI method on the app.
 func (e *BlockExecutor) ProcessProposal(
 	block *types.Block,
