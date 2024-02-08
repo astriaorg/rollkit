@@ -25,7 +25,7 @@ var DefaultNodeConfig = NodeConfig{
 	Instrumentation: config.DefaultInstrumentationConfig(),
 	Astria: AstriaSeqConfig{
 		GrpcListen:       ":50051",
-		SeqAddress:       "http://localhost:26658",
+		SeqAddress:       "http://localhost:26657",
 		SeqPrivate:       "2bd806c97f0e00af1a1fc3328fa763a9269723c8db8fac4f93af71db186d6e90",
 		SeqInitialHeight: 1,
 	},
