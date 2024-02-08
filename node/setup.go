@@ -6,10 +6,10 @@ import (
 	cmcfg "github.com/cometbft/cometbft/config"
 	proxy "github.com/cometbft/cometbft/proxy"
 
-	"github.com/rollkit/rollkit/block"
-	"github.com/rollkit/rollkit/mempool"
-	"github.com/rollkit/rollkit/p2p"
-	"github.com/rollkit/rollkit/state"
+	"github.com/astriaorg/rollkit/block"
+	"github.com/astriaorg/rollkit/mempool"
+	"github.com/astriaorg/rollkit/p2p"
+	"github.com/astriaorg/rollkit/state"
 )
 
 const readHeaderTimeout = 10 * time.Second

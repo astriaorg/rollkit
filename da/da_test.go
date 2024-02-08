@@ -19,10 +19,10 @@ import (
 
 	"google.golang.org/grpc/credentials/insecure"
 
+	"github.com/astriaorg/rollkit/types"
 	"github.com/rollkit/go-da"
 	"github.com/rollkit/go-da/proxy"
 	goDATest "github.com/rollkit/go-da/test"
-	"github.com/rollkit/rollkit/types"
 )
 
 const mockDaBlockTime = 100 * time.Millisecond

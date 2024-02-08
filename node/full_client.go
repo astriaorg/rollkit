@@ -19,10 +19,10 @@ import (
 	cmtypes "github.com/cometbft/cometbft/types"
 	"github.com/cometbft/cometbft/version"
 
-	rconfig "github.com/rollkit/rollkit/config"
-	"github.com/rollkit/rollkit/mempool"
-	"github.com/rollkit/rollkit/types"
-	abciconv "github.com/rollkit/rollkit/types/abci"
+	rconfig "github.com/astriaorg/rollkit/config"
+	"github.com/astriaorg/rollkit/mempool"
+	"github.com/astriaorg/rollkit/types"
+	abciconv "github.com/astriaorg/rollkit/types/abci"
 )
 
 const (

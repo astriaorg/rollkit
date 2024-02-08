@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/rollkit/rollkit/types"
+	"github.com/astriaorg/rollkit/types"
 )
 
 func TestStoreHeight(t *testing.T) {

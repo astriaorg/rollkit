@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/rollkit/rollkit/types"
+	"github.com/astriaorg/rollkit/types"
 )
 
 func TestBlockCache(t *testing.T) {

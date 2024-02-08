@@ -27,8 +27,8 @@ import (
 
 	tmcrypto "github.com/tendermint/tendermint/crypto"
 
-	"github.com/rollkit/rollkit/config"
-	"github.com/rollkit/rollkit/third_party/log"
+	"github.com/astriaorg/rollkit/config"
+	"github.com/astriaorg/rollkit/third_party/log"
 )
 
 // TODO(tzdybal): refactor to configuration parameters

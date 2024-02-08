@@ -11,9 +11,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/rollkit/rollkit/config"
-	test "github.com/rollkit/rollkit/test/log"
-	"github.com/rollkit/rollkit/types"
+	"github.com/astriaorg/rollkit/config"
+	test "github.com/astriaorg/rollkit/test/log"
+	"github.com/astriaorg/rollkit/types"
 )
 
 var MockServerAddr = ":7980"

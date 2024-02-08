@@ -3,9 +3,9 @@ package txindex
 import (
 	"context"
 
+	"github.com/astriaorg/rollkit/state/indexer"
 	"github.com/cometbft/cometbft/libs/service"
 	"github.com/cometbft/cometbft/types"
-	"github.com/rollkit/rollkit/state/indexer"
 )
 
 // XXX/TODO: These types should be moved to the indexer package.

@@ -26,11 +26,11 @@ import (
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 
-	"github.com/rollkit/rollkit/config"
-	test "github.com/rollkit/rollkit/test/log"
-	"github.com/rollkit/rollkit/test/mocks"
-	"github.com/rollkit/rollkit/types"
-	abciconv "github.com/rollkit/rollkit/types/abci"
+	"github.com/astriaorg/rollkit/config"
+	test "github.com/astriaorg/rollkit/test/log"
+	"github.com/astriaorg/rollkit/test/mocks"
+	"github.com/astriaorg/rollkit/types"
+	abciconv "github.com/astriaorg/rollkit/types/abci"
 )
 
 var expectedInfo = &abci.ResponseInfo{

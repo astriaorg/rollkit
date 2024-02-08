@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/astriaorg/rollkit/astria/sequencer"
+	"github.com/astriaorg/rollkit/mempool"
 	"github.com/cometbft/cometbft/libs/log"
-	"github.com/rollkit/rollkit/astria/sequencer"
-	"github.com/rollkit/rollkit/mempool"
 )
 
 type MempoolReaper struct {

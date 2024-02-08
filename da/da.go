@@ -8,10 +8,10 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 
+	"github.com/astriaorg/rollkit/third_party/log"
+	"github.com/astriaorg/rollkit/types"
+	pb "github.com/astriaorg/rollkit/types/pb/rollkit"
 	goDA "github.com/rollkit/go-da"
-	"github.com/rollkit/rollkit/third_party/log"
-	"github.com/rollkit/rollkit/types"
-	pb "github.com/rollkit/rollkit/types/pb/rollkit"
 )
 
 var (

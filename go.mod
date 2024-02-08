@@ -1,4 +1,4 @@
-module github.com/rollkit/rollkit
+module github.com/astriaorg/rollkit
 
 go 1.21.1
 

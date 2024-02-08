@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"math"
 
-	"github.com/rollkit/rollkit/third_party/celestia-app/appconsts"
+	"github.com/astriaorg/rollkit/third_party/celestia-app/appconsts"
 )
 
 const (

@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/rollkit/rollkit/types/pb/rollkit"
+	"github.com/astriaorg/rollkit/types/pb/rollkit"
 )
 
 func TestTxWithISRSerializationRoundtrip(t *testing.T) {

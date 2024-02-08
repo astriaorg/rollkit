@@ -10,7 +10,7 @@ import (
 	cmversion "github.com/cometbft/cometbft/proto/tendermint/version"
 	cmtypes "github.com/cometbft/cometbft/types"
 
-	"github.com/rollkit/rollkit/types"
+	"github.com/astriaorg/rollkit/types"
 
 	"github.com/stretchr/testify/assert"
 )

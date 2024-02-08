@@ -6,8 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/rollkit/rollkit/third_party/celestia-app/appconsts"
-	appns "github.com/rollkit/rollkit/third_party/celestia-app/namespace"
+	"github.com/astriaorg/rollkit/third_party/celestia-app/appconsts"
+	appns "github.com/astriaorg/rollkit/third_party/celestia-app/namespace"
 )
 
 // // TestPadFirstIndexedBlob ensures that we are adding padding to the first share

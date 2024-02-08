@@ -17,11 +17,11 @@ import (
 
 	testutils "github.com/celestiaorg/utils/test"
 
-	"github.com/rollkit/rollkit/block"
-	"github.com/rollkit/rollkit/da"
-	"github.com/rollkit/rollkit/mempool"
-	"github.com/rollkit/rollkit/test/mocks"
-	"github.com/rollkit/rollkit/types"
+	"github.com/astriaorg/rollkit/block"
+	"github.com/astriaorg/rollkit/da"
+	"github.com/astriaorg/rollkit/mempool"
+	"github.com/astriaorg/rollkit/test/mocks"
+	"github.com/astriaorg/rollkit/types"
 )
 
 // simply check that node is starting and stopping without panicking

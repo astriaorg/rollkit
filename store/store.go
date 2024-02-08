@@ -12,8 +12,8 @@ import (
 
 	"github.com/celestiaorg/go-header"
 
-	"github.com/rollkit/rollkit/types"
-	pb "github.com/rollkit/rollkit/types/pb/rollkit"
+	"github.com/astriaorg/rollkit/types"
+	pb "github.com/astriaorg/rollkit/types/pb/rollkit"
 )
 
 var (

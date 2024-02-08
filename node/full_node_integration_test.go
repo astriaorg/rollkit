@@ -24,10 +24,10 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/rollkit/rollkit/config"
-	test "github.com/rollkit/rollkit/test/log"
-	"github.com/rollkit/rollkit/test/mocks"
-	"github.com/rollkit/rollkit/types"
+	"github.com/astriaorg/rollkit/config"
+	test "github.com/astriaorg/rollkit/test/log"
+	"github.com/astriaorg/rollkit/test/mocks"
+	"github.com/astriaorg/rollkit/types"
 
 	testutils "github.com/celestiaorg/utils/test"
 )

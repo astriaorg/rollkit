@@ -17,10 +17,10 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/rollkit/rollkit/config"
-	"github.com/rollkit/rollkit/node"
-	"github.com/rollkit/rollkit/test/mocks"
-	"github.com/rollkit/rollkit/types"
+	"github.com/astriaorg/rollkit/config"
+	"github.com/astriaorg/rollkit/node"
+	"github.com/astriaorg/rollkit/test/mocks"
+	"github.com/astriaorg/rollkit/types"
 )
 
 func prepareProposalResponse(_ context.Context, req *abci.RequestPrepareProposal) (*abci.ResponsePrepareProposal, error) {

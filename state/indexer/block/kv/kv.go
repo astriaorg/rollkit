@@ -15,9 +15,9 @@ import (
 	"github.com/cometbft/cometbft/libs/pubsub/query/syntax"
 	"github.com/cometbft/cometbft/types"
 
-	"github.com/rollkit/rollkit/state"
-	"github.com/rollkit/rollkit/state/indexer"
-	"github.com/rollkit/rollkit/store"
+	"github.com/astriaorg/rollkit/state"
+	"github.com/astriaorg/rollkit/state/indexer"
+	"github.com/astriaorg/rollkit/store"
 )
 
 var _ indexer.BlockIndexer = (*BlockerIndexer)(nil)

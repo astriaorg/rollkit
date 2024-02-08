@@ -13,10 +13,10 @@ import (
 	"github.com/cometbft/cometbft/proxy"
 	cmtypes "github.com/cometbft/cometbft/types"
 
-	"github.com/rollkit/rollkit/mempool"
-	"github.com/rollkit/rollkit/third_party/log"
-	"github.com/rollkit/rollkit/types"
-	abciconv "github.com/rollkit/rollkit/types/abci"
+	"github.com/astriaorg/rollkit/mempool"
+	"github.com/astriaorg/rollkit/third_party/log"
+	"github.com/astriaorg/rollkit/types"
+	abciconv "github.com/astriaorg/rollkit/types/abci"
 )
 
 // ErrEmptyValSetGenerated is returned when applying the validator changes would result in empty set.

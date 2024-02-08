@@ -17,12 +17,12 @@ import (
 	ds "github.com/ipfs/go-datastore"
 	"github.com/libp2p/go-libp2p/core/crypto"
 
-	"github.com/rollkit/rollkit/config"
-	"github.com/rollkit/rollkit/mempool"
-	"github.com/rollkit/rollkit/state"
-	"github.com/rollkit/rollkit/store"
-	"github.com/rollkit/rollkit/third_party/log"
-	"github.com/rollkit/rollkit/types"
+	"github.com/astriaorg/rollkit/config"
+	"github.com/astriaorg/rollkit/mempool"
+	"github.com/astriaorg/rollkit/state"
+	"github.com/astriaorg/rollkit/store"
+	"github.com/astriaorg/rollkit/third_party/log"
+	"github.com/astriaorg/rollkit/types"
 )
 
 // Manager is responsible for aggregating transactions into blocks.

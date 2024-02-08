@@ -20,9 +20,9 @@ import (
 	"github.com/cometbft/cometbft/proxy"
 	cmtypes "github.com/cometbft/cometbft/types"
 
-	"github.com/rollkit/rollkit/mempool"
-	"github.com/rollkit/rollkit/test/mocks"
-	"github.com/rollkit/rollkit/types"
+	"github.com/astriaorg/rollkit/mempool"
+	"github.com/astriaorg/rollkit/test/mocks"
+	"github.com/astriaorg/rollkit/types"
 )
 
 func prepareProposalResponse(_ context.Context, req *abci.RequestPrepareProposal) (*abci.ResponsePrepareProposal, error) {

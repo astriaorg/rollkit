@@ -15,8 +15,8 @@ import (
 	"github.com/rs/cors"
 	"golang.org/x/net/netutil"
 
-	"github.com/rollkit/rollkit/node"
-	"github.com/rollkit/rollkit/rpc/json"
+	"github.com/astriaorg/rollkit/node"
+	"github.com/astriaorg/rollkit/rpc/json"
 )
 
 // Server handles HTTP and JSON-RPC requests, exposing Tendermint-compatible API.

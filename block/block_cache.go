@@ -3,7 +3,7 @@ package block
 import (
 	"sync"
 
-	"github.com/rollkit/rollkit/types"
+	"github.com/astriaorg/rollkit/types"
 )
 
 // BlockCache maintains blocks that are seen and hard confirmed
