@@ -25,16 +25,34 @@ type ExecutionServiceServerV1Alpha2 struct {
 
 	store              store.Store
 	blockManager       *block.SSManager
+	genesis            GenesisInfo
 	logger             log.Logger
 	blockExecutionLock sync.Mutex
 }
 
-func NewExecutionServiceServerV1Alpha2(blockManager *block.SSManager, store store.Store, logger log.Logger) *ExecutionServiceServerV1Alpha2 {
+type GenesisInfo struct {
+	RollupId                    [32]byte
+	SequencerGenesisBlockHeight uint64
+	CelestiaBaseBlockHeight     uint64
+	CelestiaBlockVariance       uint64
+}
+
+func NewExecutionServiceServerV1Alpha2(blockManager *block.SSManager, genesis GenesisInfo, store store.Store, logger log.Logger) *ExecutionServiceServerV1Alpha2 {
 	return &ExecutionServiceServerV1Alpha2{
 		blockManager: blockManager,
+		genesis:      genesis,
 		store:        store,
 		logger:       logger,
 	}
+}
+
+func (s *ExecutionServiceServerV1Alpha2) GetGenesisInfo(ctx context.Context, req *astriaPb.GetGenesisInfoRequest) (*astriaPb.GenesisInfo, error) {
+	return &astriaPb.GenesisInfo{
+		RollupId:                    s.genesis.RollupId[:],
+		SequencerGenesisBlockHeight: uint32(s.genesis.SequencerGenesisBlockHeight),
+		CelestiaBaseBlockHeight:     uint32(s.genesis.CelestiaBaseBlockHeight),
+		CelestiaBlockVariance:       uint32(s.genesis.CelestiaBlockVariance),
+	}, nil
 }
 
 // GetBlock retrieves a block by its identifier.

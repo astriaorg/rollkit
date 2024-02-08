@@ -1,8 +1,6 @@
 package config
 
 import (
-	"time"
-
 	cmcfg "github.com/cometbft/cometbft/config"
 
 	"github.com/spf13/cobra"
@@ -10,19 +8,13 @@ import (
 )
 
 const (
-	flagAggregator     = "rollkit.aggregator"
-	flagDAAddress      = "rollkit.da_address"
-	flagBlockTime      = "rollkit.block_time"
-	flagDABlockTime    = "rollkit.da_block_time"
-	flagDAStartHeight  = "rollkit.da_start_height"
-	flagLight          = "rollkit.light"
-	flagTrustedHash    = "rollkit.trusted_hash"
-	flagLazyAggregator = "rollkit.lazy_aggregator"
-	flagDAGasPrice     = "rollkit.da_gas_price"
+	flagDAStartHeight = "rollkit.da_start_height"
 
-	flagAstriaGrpcListen = "rollkit.astria_grpc_listen"
-	flagAstriaSeqAddress = "rollkit.astria_seq_addr"
-	flagAstriaSeqPrivate = "rollkit.astria_seq_private"
+	flagAstriaGrpcListen       = "rollkit.astria_grpc_listen"
+	flagAstriaSeqAddress       = "rollkit.astria_seq_addr"
+	flagAstriaSeqPrivate       = "rollkit.astria_seq_private"
+	flagAstriaSeqInitialHeight = "rollkit.astria_seq_initial_height"
+	flagDAVariance             = "rollkit.da_variance"
 )
 
 // NodeConfig stores Rollkit node configuration.
@@ -33,37 +25,25 @@ type NodeConfig struct {
 	P2P     P2PConfig
 	RPC     RPCConfig
 	// parameters below are Rollkit specific and read from config
-	Aggregator         bool `mapstructure:"aggregator"`
 	BlockManagerConfig `mapstructure:",squash"`
-	DAAddress          string `mapstructure:"da_address"`
-	Light              bool   `mapstructure:"light"`
-	HeaderConfig       `mapstructure:",squash"`
-	LazyAggregator     bool                         `mapstructure:"lazy_aggregator"`
 	Instrumentation    *cmcfg.InstrumentationConfig `mapstructure:"instrumentation"`
-	DAGasPrice         float64                      `mapstructure:"da_gas_price"`
 
 	Astria AstriaSeqConfig
 }
 
-// HeaderConfig allows node to pass the initial trusted header hash to start the header exchange service
-type HeaderConfig struct {
-	TrustedHash string `mapstructure:"trusted_hash"`
-}
-
 // BlockManagerConfig consists of all parameters required by BlockManagerConfig
 type BlockManagerConfig struct {
-	// BlockTime defines how often new blocks are produced
-	BlockTime time.Duration `mapstructure:"block_time"`
-	// DABlockTime informs about block time of underlying data availability layer
-	DABlockTime time.Duration `mapstructure:"da_block_time"`
-	// DAStartHeight allows skipping first DAStartHeight-1 blocks when querying for blocks.
+	// The first block height of celestia chain to use for rollup transactions.
 	DAStartHeight uint64 `mapstructure:"da_start_height"`
+	// The allowed variance in celestia for sequencer blocks to have been posted.
+	DAVariance uint64 `mapstrcuture:"da_variance"`
 }
 
 type AstriaSeqConfig struct {
-	GrpcListen string `mapstructure:"astria_grpc_listen"`
-	SeqAddress string `mapstructure:"astria_seq_addr"`
-	SeqPrivate string `mapstructure:"astria_seq_private"`
+	GrpcListen       string `mapstructure:"astria_grpc_listen"`
+	SeqAddress       string `mapstructure:"astria_seq_addr"`
+	SeqPrivate       string `mapstructure:"astria_seq_private"`
+	SeqInitialHeight uint64 `mapstructure:"astria_seq_initial_height"`
 }
 
 // GetNodeConfig translates Tendermint's configuration into Rollkit configuration.
@@ -97,19 +77,13 @@ func GetNodeConfig(nodeConf *NodeConfig, cmConf *cmcfg.Config) {
 //
 // This method is called in cosmos-sdk.
 func (nc *NodeConfig) GetViperConfig(v *viper.Viper) error {
-	nc.Aggregator = v.GetBool(flagAggregator)
-	nc.DAAddress = v.GetString(flagDAAddress)
 	nc.DAStartHeight = v.GetUint64(flagDAStartHeight)
-	nc.DABlockTime = v.GetDuration(flagDABlockTime)
-	nc.BlockTime = v.GetDuration(flagBlockTime)
-	nc.LazyAggregator = v.GetBool(flagLazyAggregator)
-	nc.Light = v.GetBool(flagLight)
-	nc.TrustedHash = v.GetString(flagTrustedHash)
-	nc.DAGasPrice = v.GetFloat64(flagDAGasPrice)
+	nc.DAVariance = v.GetUint64(flagDAVariance)
 
 	nc.Astria.GrpcListen = v.GetString(flagAstriaGrpcListen)
 	nc.Astria.SeqAddress = v.GetString(flagAstriaSeqAddress)
 	nc.Astria.SeqPrivate = v.GetString(flagAstriaSeqPrivate)
+	nc.Astria.SeqInitialHeight = v.GetUint64(flagAstriaSeqInitialHeight)
 
 	return nil
 }
@@ -119,17 +93,10 @@ func (nc *NodeConfig) GetViperConfig(v *viper.Viper) error {
 // This function is called in cosmos-sdk.
 func AddFlags(cmd *cobra.Command) {
 	def := DefaultNodeConfig
-	cmd.Flags().Bool(flagAggregator, def.Aggregator, "run node in aggregator mode")
-	cmd.Flags().Bool(flagLazyAggregator, def.LazyAggregator, "wait for transactions, don't build empty blocks")
-	cmd.Flags().String(flagDAAddress, def.DAAddress, "DA address (host:port)")
-	cmd.Flags().Duration(flagBlockTime, def.BlockTime, "block time (for aggregator mode)")
-	cmd.Flags().Duration(flagDABlockTime, def.DABlockTime, "DA chain block time (for syncing)")
-	cmd.Flags().Float64(flagDAGasPrice, def.DAGasPrice, "DA gas price for blob transactions")
-	cmd.Flags().Uint64(flagDAStartHeight, def.DAStartHeight, "starting DA block height (for syncing)")
-	cmd.Flags().Bool(flagLight, def.Light, "run light client")
-	cmd.Flags().String(flagTrustedHash, def.TrustedHash, "initial trusted hash to start the header exchange service")
-
 	cmd.Flags().String(flagAstriaGrpcListen, def.Astria.GrpcListen, "Astria gRPC listen address for execution api")
 	cmd.Flags().String(flagAstriaSeqAddress, def.Astria.SeqAddress, "Astria sequencer address")
 	cmd.Flags().String(flagAstriaSeqPrivate, def.Astria.SeqPrivate, "Astria sequencer private key")
+	cmd.Flags().Uint64(flagDAStartHeight, def.DAStartHeight, "The first block height of celestia chain to use for rollup transactions")
+	cmd.Flags().Uint64(flagAstriaSeqInitialHeight, def.Astria.SeqInitialHeight, "The first block height of sequencer chain to use for rollup transactions")
+	cmd.Flags().Uint64(flagDAVariance, def.DAVariance, "The allowed variance in celestia for sequencer blocks to have been posted")
 }

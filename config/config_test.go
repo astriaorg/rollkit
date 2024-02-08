@@ -2,12 +2,9 @@ package config
 
 import (
 	"testing"
-	"time"
 
 	cmcfg "github.com/cometbft/cometbft/config"
 
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -33,25 +30,4 @@ func TestGetNodeConfig(t *testing.T) {
 			assert.Equal(t, c.expected, actual)
 		})
 	}
-}
-func TestViperAndCobra(t *testing.T) {
-	t.Parallel()
-	assert := assert.New(t)
-
-	cmd := &cobra.Command{}
-	AddFlags(cmd)
-
-	v := viper.GetViper()
-	assert.NoError(v.BindPFlags(cmd.Flags()))
-
-	assert.NoError(cmd.Flags().Set(flagAggregator, "true"))
-	assert.NoError(cmd.Flags().Set(flagDAAddress, `{"json":true}`))
-	assert.NoError(cmd.Flags().Set(flagBlockTime, "1234s"))
-
-	nc := DefaultNodeConfig
-	assert.NoError(nc.GetViperConfig(v))
-
-	assert.Equal(true, nc.Aggregator)
-	assert.Equal(`{"json":true}`, nc.DAAddress)
-	assert.Equal(1234*time.Second, nc.BlockTime)
 }

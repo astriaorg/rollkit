@@ -3,6 +3,7 @@ package node
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -169,17 +170,25 @@ func newFullNode(
 		return nil, err
 	}
 
+	// genesis info for exec api & sequencer client
+	execGenesisInfo := execution.GenesisInfo{
+		RollupId:                    sha256.Sum256([]byte(genesis.ChainID)),
+		SequencerGenesisBlockHeight: nodeConfig.Astria.SeqInitialHeight,
+		CelestiaBaseBlockHeight:     nodeConfig.DAStartHeight,
+		CelestiaBlockVariance:       nodeConfig.DAVariance,
+	}
+
 	// init mempool reaper
 	privateKeyBytes, err := hex.DecodeString(nodeConfig.Astria.SeqPrivate)
 	if err != nil {
 		return nil, err
 	}
 	private := ed25519.NewKeyFromSeed(privateKeyBytes)
-	seqClient := sequencer.NewClient(nodeConfig.Astria.SeqAddress, private, genesis.ChainID)
+	seqClient := sequencer.NewClient(nodeConfig.Astria.SeqAddress, private, execGenesisInfo.RollupId)
 	reaper := astriamempool.NewMempoolReaper(seqClient, mempool, logger)
 
 	// init grpc execution api
-	serviceV1a2 := execution.NewExecutionServiceServerV1Alpha2(blockManager, store, logger)
+	serviceV1a2 := execution.NewExecutionServiceServerV1Alpha2(blockManager, execGenesisInfo, store, logger)
 	grpcServerHandler := execution.NewGRPCServerHandler(serviceV1a2, nodeConfig.Astria.GrpcListen)
 
 	node := &FullNode{

@@ -1,8 +1,6 @@
 package config
 
 import (
-	"time"
-
 	"github.com/cometbft/cometbft/config"
 )
 
@@ -20,22 +18,15 @@ var DefaultNodeConfig = NodeConfig{
 		ListenAddress: DefaultListenAddress,
 		Seeds:         "",
 	},
-	Aggregator:     false,
-	LazyAggregator: false,
 	BlockManagerConfig: BlockManagerConfig{
-		BlockTime:   1 * time.Second,
-		DABlockTime: 15 * time.Second,
-	},
-	DAAddress:  ":26650",
-	DAGasPrice: -1,
-	Light:      false,
-	HeaderConfig: HeaderConfig{
-		TrustedHash: "",
+		DAStartHeight: 1,
+		DAVariance:    3600,
 	},
 	Instrumentation: config.DefaultInstrumentationConfig(),
 	Astria: AstriaSeqConfig{
-		GrpcListen: ":50051",
-		SeqAddress: "http://localhost:26658",
-		SeqPrivate: "2bd806c97f0e00af1a1fc3328fa763a9269723c8db8fac4f93af71db186d6e90",
+		GrpcListen:       ":50051",
+		SeqAddress:       "http://localhost:26658",
+		SeqPrivate:       "2bd806c97f0e00af1a1fc3328fa763a9269723c8db8fac4f93af71db186d6e90",
+		SeqInitialHeight: 1,
 	},
 }

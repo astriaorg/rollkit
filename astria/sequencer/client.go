@@ -13,22 +13,22 @@ import (
 
 // SequencerClient is a client for interacting with the sequencer.
 type Client struct {
-	Client  *client.Client
-	Signer  *client.Signer
-	chainId string
-	nonce   uint32
+	Client   *client.Client
+	Signer   *client.Signer
+	rollupId [32]byte
+	nonce    uint32
 }
 
-func NewClient(sequencerAddr string, private ed25519.PrivateKey, chainId string) *Client {
+func NewClient(sequencerAddr string, private ed25519.PrivateKey, rollupId [32]byte) *Client {
 	c, err := client.NewClient(sequencerAddr)
 	if err != nil {
 		panic(err)
 	}
 
 	return &Client{
-		Client:  c,
-		Signer:  client.NewSigner(private),
-		chainId: chainId,
+		Client:   c,
+		Signer:   client.NewSigner(private),
+		rollupId: rollupId,
 	}
 }
 
@@ -39,7 +39,7 @@ func (c *Client) BroadcastTx(tx []byte) (*tendermintPb.ResultBroadcastTx, error)
 			{
 				Value: &astriaPb.Action_SequenceAction{
 					SequenceAction: &astriaPb.SequenceAction{
-						RollupId: []byte(c.chainId),
+						RollupId: c.rollupId[:],
 						Data:     tx,
 					},
 				},
@@ -84,9 +84,11 @@ func (c *Client) BroadcastTx(tx []byte) (*tendermintPb.ResultBroadcastTx, error)
 			return nil, err
 		}
 		if resp.Code != 0 {
+			fmt.Println(resp)
 			return nil, fmt.Errorf("unexpected error code: %d", resp.Code)
 		}
 	} else if resp.Code != 0 {
+		fmt.Println(resp)
 		return nil, fmt.Errorf("unexpected error code: %d", resp.Code)
 	}
 

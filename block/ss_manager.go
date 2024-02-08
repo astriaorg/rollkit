@@ -4,13 +4,17 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
 	abci "github.com/cometbft/cometbft/abci/types"
+	cmcrypto "github.com/cometbft/cometbft/crypto"
+	"github.com/cometbft/cometbft/crypto/merkle"
 	"github.com/cometbft/cometbft/proxy"
 	cmtypes "github.com/cometbft/cometbft/types"
+	ds "github.com/ipfs/go-datastore"
 	"github.com/libp2p/go-libp2p/core/crypto"
 
 	"github.com/rollkit/rollkit/config"
@@ -295,4 +299,71 @@ func (m *SSManager) applyBlock(ctx context.Context, block *types.Block) (types.S
 	m.lastStateMtx.RLock()
 	defer m.lastStateMtx.RUnlock()
 	return m.executor.ApplyBlock(ctx, m.lastState, block)
+}
+
+// getInitialState tries to load lastState from Store, and if it's not available it reads GenesisDoc.
+func getInitialState(store store.Store, genesis *cmtypes.GenesisDoc) (types.State, error) {
+	// Load the state from store.
+	s, err := store.GetState(context.Background())
+	if errors.Is(err, ds.ErrNotFound) {
+		// If the user is starting a fresh chain (or hard-forking), we assume the stored state is empty.
+		s, err = types.NewFromGenesisDoc(genesis)
+		if err != nil {
+			return types.State{}, err
+		}
+		store.SetHeight(context.Background(), s.LastBlockHeight)
+	} else if err != nil {
+		return types.State{}, err
+	} else {
+		// Perform a sanity-check to stop the user from
+		// using a higher genesis than the last stored state.
+		// if they meant to hard-fork, they should have cleared the stored State
+		if uint64(genesis.InitialHeight) > s.LastBlockHeight {
+			return types.State{}, fmt.Errorf("genesis.InitialHeight (%d) is greater than last stored state's LastBlockHeight (%d)", genesis.InitialHeight, s.LastBlockHeight)
+		}
+	}
+
+	return s, nil
+}
+
+func updateState(s *types.State, res *abci.ResponseInitChain) {
+	// If the app did not return an app hash, we keep the one set from the genesis doc in
+	// the state. We don't set appHash since we don't want the genesis doc app hash
+	// recorded in the genesis block. We should probably just remove GenesisDoc.AppHash.
+	if len(res.AppHash) > 0 {
+		s.AppHash = res.AppHash
+	}
+
+	if res.ConsensusParams != nil {
+		params := res.ConsensusParams
+		if params.Block != nil {
+			s.ConsensusParams.Block.MaxBytes = params.Block.MaxBytes
+			s.ConsensusParams.Block.MaxGas = params.Block.MaxGas
+		}
+		if params.Evidence != nil {
+			s.ConsensusParams.Evidence.MaxAgeNumBlocks = params.Evidence.MaxAgeNumBlocks
+			s.ConsensusParams.Evidence.MaxAgeDuration = params.Evidence.MaxAgeDuration
+			s.ConsensusParams.Evidence.MaxBytes = params.Evidence.MaxBytes
+		}
+		if params.Validator != nil {
+			// Copy params.Validator.PubkeyTypes, and set result's value to the copy.
+			// This avoids having to initialize the slice to 0 values, and then write to it again.
+			s.ConsensusParams.Validator.PubKeyTypes = append([]string{}, params.Validator.PubKeyTypes...)
+		}
+		if params.Version != nil {
+			s.ConsensusParams.Version.App = params.Version.App
+		}
+		s.Version.Consensus.App = s.ConsensusParams.Version.App
+	}
+	// We update the last results hash with the empty hash, to conform with RFC-6962.
+	s.LastResultsHash = merkle.HashFromByteSlices(nil)
+
+}
+
+func getAddress(key crypto.PrivKey) ([]byte, error) {
+	rawKey, err := key.GetPublic().Raw()
+	if err != nil {
+		return nil, err
+	}
+	return cmcrypto.AddressHash(rawKey), nil
 }
