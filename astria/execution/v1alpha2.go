@@ -3,9 +3,10 @@ package execution
 import (
 	"context"
 	"sync"
+	"time"
 
-	astriaGrpc "buf.build/gen/go/astria/astria/grpc/go/astria/execution/v1alpha2/executionv1alpha2grpc"
-	astriaPb "buf.build/gen/go/astria/astria/protocolbuffers/go/astria/execution/v1alpha2"
+	astriaGrpc "buf.build/gen/go/astria/execution-apis/grpc/go/astria/execution/v1alpha2/executionv1alpha2grpc"
+	astriaPb "buf.build/gen/go/astria/execution-apis/protocolbuffers/go/astria/execution/v1alpha2"
 	cmbytes "github.com/cometbft/cometbft/libs/bytes"
 	"github.com/cometbft/cometbft/libs/log"
 	"github.com/rollkit/rollkit/block"
@@ -13,6 +14,7 @@ import (
 	"github.com/rollkit/rollkit/types"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -37,7 +39,8 @@ func NewExecutionServiceServerV1Alpha2(blockManager *block.SSManager, store stor
 
 // GetBlock retrieves a block by its identifier.
 func (s *ExecutionServiceServerV1Alpha2) GetBlock(ctx context.Context, req *astriaPb.GetBlockRequest) (*astriaPb.Block, error) {
-	s.logger.Info("GetBlock called", "request", req)
+	reqJson, _ := protojson.Marshal(req)
+	s.logger.Info("GetBlock called", "request", reqJson)
 
 	res, err := s.getBlockFromIdentifier(ctx, req.GetIdentifier())
 	if err != nil {
@@ -45,13 +48,16 @@ func (s *ExecutionServiceServerV1Alpha2) GetBlock(ctx context.Context, req *astr
 		return nil, err
 	}
 
-	s.logger.Info("GetBlock completed", "request", req, "response", res)
+	resJson, _ := protojson.Marshal(res)
+	s.logger.Info("GetBlock completed", "response", resJson)
 	return res, nil
 }
 
 // BatchGetBlocks will return an array of Blocks given an array of block identifiers.
 func (s *ExecutionServiceServerV1Alpha2) BatchGetBlocks(ctx context.Context, req *astriaPb.BatchGetBlocksRequest) (*astriaPb.BatchGetBlocksResponse, error) {
-	s.logger.Info("BatchGetBlocks called", "request", req)
+	reqJson, _ := protojson.Marshal(req)
+	s.logger.Info("BatchGetBlocks called", "request", reqJson)
+
 	var blocks []*astriaPb.Block
 
 	ids := req.GetIdentifiers()
@@ -69,7 +75,8 @@ func (s *ExecutionServiceServerV1Alpha2) BatchGetBlocks(ctx context.Context, req
 		Blocks: blocks,
 	}
 
-	s.logger.Info("BatchGetBlocks completed", "request", req, "response", res)
+	resJson, _ := protojson.Marshal(res)
+	s.logger.Info("BatchGetBlocks completed", "response", resJson)
 	return res, nil
 }
 
@@ -81,7 +88,8 @@ func (s *ExecutionServiceServerV1Alpha2) ExecuteBlock(ctx context.Context, req *
 	default:
 	}
 
-	s.logger.Info("ExecuteBlock called", "request", req)
+	reqJson, _ := protojson.Marshal(req)
+	s.logger.Info("ExecuteBlock called", "request", reqJson)
 
 	s.blockExecutionLock.Lock()
 	defer s.blockExecutionLock.Unlock()
@@ -93,31 +101,81 @@ func (s *ExecutionServiceServerV1Alpha2) ExecuteBlock(ctx context.Context, req *
 
 	block, err := s.blockManager.PublishBlock(ctx, types.Hash(req.PrevBlockHash), req.Timestamp.AsTime(), txs)
 	if err != nil {
-		s.logger.Error("failed to publish block to chain", "hash", block.Hash(), "prevHash", req.PrevBlockHash, "err", err)
+		s.logger.Error("Failed to publish block to chain", "hash", block.Hash(), "prevHash", types.Hash(req.PrevBlockHash), "err", err)
 		return nil, status.Error(codes.Internal, "failed to insert block to chain")
+	}
+
+	s.logger.Info("Published block", "height", block.Height(), "timestamp", block.Time(), "hash", block.Hash(), "parent_hash", block.LastHeader())
+
+	parentHash := block.LastHeader()
+	if block.Height() == 1 {
+		zeroHash := [32]byte{0x0}
+		parentHash = types.Hash(zeroHash[:])
 	}
 
 	res := &astriaPb.Block{
 		Number:          uint32(block.Height()),
 		Hash:            cmbytes.HexBytes(block.Hash()),
-		ParentBlockHash: cmbytes.HexBytes(block.LastHeader()),
+		ParentBlockHash: cmbytes.HexBytes(parentHash),
 		Timestamp:       timestamppb.New(block.Time()),
 	}
 
-	s.logger.Info("ExecuteBlock completed", "request", req, "response", res)
+	resJson, _ := protojson.Marshal(res)
+	s.logger.Info("ExecuteBlock completed", "response", resJson)
 	return res, nil
 }
 
 // GetCommitmentState fetches the current CommitmentState of the chain.
 func (s *ExecutionServiceServerV1Alpha2) GetCommitmentState(ctx context.Context, req *astriaPb.GetCommitmentStateRequest) (*astriaPb.CommitmentState, error) {
-	s.logger.Info("GetCommitmentState called", "request", req)
-	return nil, nil
+	reqJson, _ := protojson.Marshal(req)
+	s.logger.Info("GetCommitmentState called", "request", reqJson)
+
+	var res *astriaPb.CommitmentState
+
+	height := s.blockManager.GetStoreHeight()
+
+	if height == 0 {
+		genHash := [32]byte{0x0}
+		pbGenBlock := &astriaPb.Block{
+			Number:          uint32(0),
+			Hash:            genHash[:],
+			ParentBlockHash: genHash[:],
+			Timestamp:       timestamppb.New(time.Now()),
+		}
+		res = &astriaPb.CommitmentState{
+			Soft: pbGenBlock,
+			Firm: pbGenBlock,
+		}
+	} else {
+		block, err := s.store.GetBlock(ctx, height)
+		if err != nil {
+			s.logger.Error("failed finding block with height", "height", height, "error", err)
+			return nil, err
+		}
+
+		pbBlock := &astriaPb.Block{
+			Number:          uint32(block.Height()),
+			Hash:            cmbytes.HexBytes(block.Hash()),
+			ParentBlockHash: cmbytes.HexBytes(block.LastHeader()),
+			Timestamp:       timestamppb.New(block.Time()),
+		}
+
+		res = &astriaPb.CommitmentState{
+			Soft: pbBlock,
+			Firm: pbBlock,
+		}
+	}
+
+	resJson, _ := protojson.Marshal(res)
+	s.logger.Info("GetCommitmentState completed", "response", resJson)
+	return res, nil
 }
 
 // UpdateCommitmentState replaces the whole CommitmentState with a new CommitmentState.
 func (s *ExecutionServiceServerV1Alpha2) UpdateCommitmentState(ctx context.Context, req *astriaPb.UpdateCommitmentStateRequest) (*astriaPb.CommitmentState, error) {
-	s.logger.Info("UpdateCommitmentState called", "request", req)
-	return nil, nil
+	reqJson, _ := protojson.Marshal(req)
+	s.logger.Info("UpdateCommitmentState called", "request", reqJson)
+	return req.CommitmentState, nil
 }
 
 func (s *ExecutionServiceServerV1Alpha2) getBlockFromIdentifier(ctx context.Context, identifier *astriaPb.BlockIdentifier) (*astriaPb.Block, error) {

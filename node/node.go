@@ -33,26 +33,14 @@ func NewNode(
 	metricsProvider MetricsProvider,
 	logger log.Logger,
 ) (Node, error) {
-	if !conf.Light {
-		return newFullNode(
-			ctx,
-			conf,
-			p2pKey,
-			signingKey,
-			appClient,
-			genesis,
-			metricsProvider,
-			logger,
-		)
-	} else {
-		return newLightNode(
-			ctx,
-			conf,
-			p2pKey,
-			appClient,
-			genesis,
-			metricsProvider,
-			logger,
-		)
-	}
+	return newFullNode(
+		ctx,
+		conf,
+		p2pKey,
+		signingKey,
+		appClient,
+		genesis,
+		metricsProvider,
+		logger,
+	)
 }

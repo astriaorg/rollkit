@@ -68,6 +68,7 @@ func NewSSManager(
 
 	exec := state.NewBlockExecutor(proposerAddress, genesis.ChainID, mempool, proxyApp, eventBus, logger, execMetrics)
 	if s.LastBlockHeight+1 == uint64(genesis.InitialHeight) {
+		logger.Info("Initializing chain")
 		res, err := exec.InitChain(genesis)
 		if err != nil {
 			return nil, err

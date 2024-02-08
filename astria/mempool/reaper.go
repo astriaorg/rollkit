@@ -4,25 +4,26 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/rollkit/rollkit/mempool"
-	"github.com/rollkit/rollkit/types"
-
+	"github.com/cometbft/cometbft/libs/log"
 	"github.com/rollkit/rollkit/astria/sequencer"
+	"github.com/rollkit/rollkit/mempool"
 )
 
 type MempoolReaper struct {
 	c       *sequencer.Client
 	mempool *mempool.CListMempool
+	logger  log.Logger
 
 	mu      sync.Mutex
 	started bool
 	stopCh  chan struct{}
 }
 
-func NewMempoolReaper(client *sequencer.Client, mempool *mempool.CListMempool) *MempoolReaper {
+func NewMempoolReaper(client *sequencer.Client, mempool *mempool.CListMempool, logger log.Logger) *MempoolReaper {
 	return &MempoolReaper{
 		c:       client,
 		mempool: mempool,
+		logger:  logger,
 		started: false,
 		stopCh:  make(chan struct{}),
 	}
@@ -47,10 +48,12 @@ func (mr *MempoolReaper) Reap() {
 				case <-mr.stopCh:
 					return
 				default:
-					mempoolTx := tx0.Value.(*mempoolTx)
+					mempoolTx := tx0.Value.(*mempool.MempoolTx)
+
+					mr.logger.Info("reaped tx from mempool", "tx", mempoolTx.Tx())
 
 					// submit to shared sequencer
-					res, err := mr.c.BroadcastTx(mempoolTx.tx)
+					res, err := mr.c.BroadcastTx(mempoolTx.Tx())
 					if err != nil {
 						panic(fmt.Sprintf("error sending message: %s\n", err))
 					}
@@ -94,18 +97,4 @@ func (mr *MempoolReaper) Stop() error {
 	close(mr.stopCh)
 	mr.started = false
 	return nil
-}
-
-// copied from rollkit clist_mempool.go
-//--------------------------------------------------------------------------------
-
-// mempoolTx is a transaction that successfully ran
-type mempoolTx struct {
-	height    uint64   // height that this tx had been validated in
-	gasWanted int64    // amount of gas this tx states it will require
-	tx        types.Tx //
-
-	// ids of peers who've sent us this tx (as a map for quick lookups).
-	// senders: PeerID -> bool
-	senders sync.Map
 }

@@ -16,11 +16,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	abci "github.com/cometbft/cometbft/abci/types"
 	llcfg "github.com/cometbft/cometbft/config"
 	"github.com/cometbft/cometbft/libs/log"
 	"github.com/cometbft/cometbft/libs/service"
-	corep2p "github.com/cometbft/cometbft/p2p"
 	proxy "github.com/cometbft/cometbft/proxy"
 	rpcclient "github.com/cometbft/cometbft/rpc/client"
 	cmtypes "github.com/cometbft/cometbft/types"
@@ -31,7 +29,6 @@ import (
 	"github.com/rollkit/rollkit/block"
 	"github.com/rollkit/rollkit/config"
 	"github.com/rollkit/rollkit/mempool"
-	"github.com/rollkit/rollkit/p2p"
 	"github.com/rollkit/rollkit/state"
 	"github.com/rollkit/rollkit/state/indexer"
 	blockidxkv "github.com/rollkit/rollkit/state/indexer/block/kv"
@@ -44,7 +41,6 @@ import (
 // prefixes used in KV store to separate main node data from DALC data
 var (
 	mainPrefix    = "0"
-	dalcPrefix    = "1"
 	indexerPrefix = "2" // indexPrefix uses "i", so using "0-2" to avoid clash
 )
 
@@ -174,19 +170,17 @@ func newFullNode(
 	}
 
 	// init mempool reaper
-	sequencerAddr := ""
-	privateKeyBytes, err := hex.DecodeString("your_private_key_in_hex")
+	privateKeyBytes, err := hex.DecodeString(nodeConfig.Astria.SeqPrivate)
 	if err != nil {
 		return nil, err
 	}
-	private := ed25519.PrivateKey(privateKeyBytes)
-	seqClient := sequencer.NewClient(sequencerAddr, private, genesis.ChainID)
-	reaper := astriamempool.NewMempoolReaper(seqClient, mempool)
+	private := ed25519.NewKeyFromSeed(privateKeyBytes)
+	seqClient := sequencer.NewClient(nodeConfig.Astria.SeqAddress, private, genesis.ChainID)
+	reaper := astriamempool.NewMempoolReaper(seqClient, mempool, logger)
 
 	// init grpc execution api
-	executionAddr := ":50051"
 	serviceV1a2 := execution.NewExecutionServiceServerV1Alpha2(blockManager, store, logger)
-	grpcServerHandler := execution.NewGRPCServerHandler(serviceV1a2, executionAddr)
+	grpcServerHandler := execution.NewGRPCServerHandler(serviceV1a2, nodeConfig.Astria.GrpcListen)
 
 	node := &FullNode{
 		proxyApp:   proxyApp,
@@ -442,46 +436,6 @@ func (n *FullNode) EventBus() *cmtypes.EventBus {
 // AppClient returns ABCI proxy connections to communicate with application.
 func (n *FullNode) AppClient() proxy.AppConns {
 	return n.proxyApp
-}
-
-// newTxValidator creates a pubsub validator that uses the node's mempool to check the
-// transaction. If the transaction is valid, then it is added to the mempool
-func (n *FullNode) newTxValidator(metrics *p2p.Metrics) p2p.GossipValidator {
-	return func(m *p2p.GossipMessage) bool {
-		n.Logger.Debug("transaction received", "bytes", len(m.Data))
-		msgBytes := m.Data
-		labels := []string{
-			"peer_id", m.From.String(),
-			"chID", n.genesis.ChainID,
-		}
-		metrics.PeerReceiveBytesTotal.With(labels...).Add(float64(len(msgBytes)))
-		metrics.MessageReceiveBytesTotal.With("message_type", "tx").Add(float64(len(msgBytes)))
-		checkTxResCh := make(chan *abci.ResponseCheckTx, 1)
-		err := n.Mempool.CheckTx(m.Data, func(resp *abci.ResponseCheckTx) {
-			select {
-			case <-n.ctx.Done():
-				return
-			case checkTxResCh <- resp:
-			}
-		}, mempool.TxInfo{
-			SenderID:    n.mempoolIDs.GetForPeer(m.From),
-			SenderP2PID: corep2p.ID(m.From),
-		})
-		switch {
-		case errors.Is(err, mempool.ErrTxInCache):
-			return true
-		case errors.Is(err, mempool.ErrMempoolIsFull{}):
-			return true
-		case errors.Is(err, mempool.ErrTxTooLarge{}):
-			return false
-		case errors.Is(err, mempool.ErrPreCheck{}):
-			return false
-		default:
-		}
-		checkTxResp := <-checkTxResCh
-
-		return checkTxResp.Code == abci.CodeTypeOK
-	}
 }
 
 func newPrefixKV(kvStore ds.Datastore, prefix string) ds.TxnDatastore {

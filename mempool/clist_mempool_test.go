@@ -217,7 +217,7 @@ func TestReapMaxBytesMaxGas(t *testing.T) {
 
 	// Ensure gas calculation behaves as expected
 	checkTxs(t, mp, 1, UnknownPeerID)
-	tx0 := mp.TxsFront().Value.(*mempoolTx)
+	tx0 := mp.TxsFront().Value.(*MempoolTx)
 	require.Equal(t, tx0.gasWanted, int64(1), "transactions gas was set incorrectly")
 	// ensure each tx is 20 bytes long
 	require.Equal(t, len(tx0.tx), 20, "Tx is longer than 20 bytes")

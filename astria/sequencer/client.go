@@ -8,6 +8,7 @@ import (
 	astriaPb "buf.build/gen/go/astria/astria/protocolbuffers/go/astria/sequencer/v1alpha1"
 	"github.com/astriaorg/go-sequencer-client/client"
 	tendermintPb "github.com/cometbft/cometbft/rpc/core/types"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 // SequencerClient is a client for interacting with the sequencer.
@@ -51,7 +52,8 @@ func (c *Client) BroadcastTx(tx []byte) (*tendermintPb.ResultBroadcastTx, error)
 		return nil, err
 	}
 
-	fmt.Printf("submitting tx to sequencer: %s\n", tx)
+	signedJson, _ := protojson.Marshal(signed)
+	fmt.Printf("submitting tx to sequencer: %s\n", signedJson)
 
 	resp, err := c.Client.BroadcastTxSync(context.Background(), signed)
 	if err != nil {
