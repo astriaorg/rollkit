@@ -3,10 +3,10 @@ package execution
 import (
 	"context"
 	"sync"
-	"time"
 
 	astriaGrpc "buf.build/gen/go/astria/execution-apis/grpc/go/astria/execution/v1alpha2/executionv1alpha2grpc"
 	astriaPb "buf.build/gen/go/astria/execution-apis/protocolbuffers/go/astria/execution/v1alpha2"
+	"github.com/astriaorg/rollkit/astria/state/commitment"
 	"github.com/astriaorg/rollkit/block"
 	"github.com/astriaorg/rollkit/store"
 	"github.com/astriaorg/rollkit/types"
@@ -23,6 +23,7 @@ type ExecutionServiceServerV1Alpha2 struct {
 	// UnimplementedExecutionServiceServer for forward compatibility
 	astriaGrpc.UnimplementedExecutionServiceServer
 
+	commitmentStore    *commitment.CommitmentState
 	store              store.Store
 	blockManager       *block.SSManager
 	genesis            GenesisInfo
@@ -37,12 +38,13 @@ type GenesisInfo struct {
 	CelestiaBlockVariance       uint64
 }
 
-func NewExecutionServiceServerV1Alpha2(blockManager *block.SSManager, genesis GenesisInfo, store store.Store, logger log.Logger) *ExecutionServiceServerV1Alpha2 {
+func NewExecutionServiceServerV1Alpha2(blockManager *block.SSManager, genesis GenesisInfo, commitmentStore *commitment.CommitmentState, store store.Store, logger log.Logger) *ExecutionServiceServerV1Alpha2 {
 	return &ExecutionServiceServerV1Alpha2{
-		blockManager: blockManager,
-		genesis:      genesis,
-		store:        store,
-		logger:       logger,
+		blockManager:    blockManager,
+		genesis:         genesis,
+		commitmentStore: commitmentStore,
+		store:           store,
+		logger:          logger,
 	}
 }
 
@@ -148,40 +150,10 @@ func (s *ExecutionServiceServerV1Alpha2) GetCommitmentState(ctx context.Context,
 	reqJson, _ := protojson.Marshal(req)
 	s.logger.Info("GetCommitmentState called", "request", reqJson)
 
-	var res *astriaPb.CommitmentState
-
-	height := s.blockManager.GetStoreHeight()
-
-	if height == 0 {
-		genHash := [32]byte{0x0}
-		pbGenBlock := &astriaPb.Block{
-			Number:          uint32(0),
-			Hash:            genHash[:],
-			ParentBlockHash: genHash[:],
-			Timestamp:       timestamppb.New(time.Now()),
-		}
-		res = &astriaPb.CommitmentState{
-			Soft: pbGenBlock,
-			Firm: pbGenBlock,
-		}
-	} else {
-		block, err := s.store.GetBlock(ctx, height)
-		if err != nil {
-			s.logger.Error("failed finding block with height", "height", height, "error", err)
-			return nil, err
-		}
-
-		pbBlock := &astriaPb.Block{
-			Number:          uint32(block.Height()),
-			Hash:            cmbytes.HexBytes(block.Hash()),
-			ParentBlockHash: cmbytes.HexBytes(block.LastHeader()),
-			Timestamp:       timestamppb.New(block.Time()),
-		}
-
-		res = &astriaPb.CommitmentState{
-			Soft: pbBlock,
-			Firm: pbBlock,
-		}
+	res, err := s.commitmentStore.GetCommitmentState()
+	if err != nil {
+		s.logger.Error("GetCommitmentState failed", "err", err)
+		return &astriaPb.CommitmentState{}, err
 	}
 
 	resJson, _ := protojson.Marshal(res)
@@ -193,6 +165,11 @@ func (s *ExecutionServiceServerV1Alpha2) GetCommitmentState(ctx context.Context,
 func (s *ExecutionServiceServerV1Alpha2) UpdateCommitmentState(ctx context.Context, req *astriaPb.UpdateCommitmentStateRequest) (*astriaPb.CommitmentState, error) {
 	reqJson, _ := protojson.Marshal(req)
 	s.logger.Info("UpdateCommitmentState called", "request", reqJson)
+
+	if err := s.commitmentStore.UpdateCommitmentState(req.CommitmentState); err != nil {
+		s.logger.Error("UpdateCommitmentState failed", "err", err)
+	}
+
 	return req.CommitmentState, nil
 }
 

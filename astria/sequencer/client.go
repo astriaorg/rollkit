@@ -7,6 +7,7 @@ import (
 
 	astriaPb "buf.build/gen/go/astria/astria/protocolbuffers/go/astria/sequencer/v1alpha1"
 	"github.com/astriaorg/go-sequencer-client/client"
+	"github.com/cometbft/cometbft/libs/log"
 	tendermintPb "github.com/cometbft/cometbft/rpc/core/types"
 	"google.golang.org/protobuf/encoding/protojson"
 )
@@ -17,9 +18,10 @@ type Client struct {
 	Signer   *client.Signer
 	rollupId [32]byte
 	nonce    uint32
+	logger   log.Logger
 }
 
-func NewClient(sequencerAddr string, private ed25519.PrivateKey, rollupId [32]byte) *Client {
+func NewClient(sequencerAddr string, private ed25519.PrivateKey, rollupId [32]byte, logger log.Logger) *Client {
 	c, err := client.NewClient(sequencerAddr)
 	if err != nil {
 		panic(err)
@@ -29,6 +31,7 @@ func NewClient(sequencerAddr string, private ed25519.PrivateKey, rollupId [32]by
 		Client:   c,
 		Signer:   client.NewSigner(private),
 		rollupId: rollupId,
+		logger:   logger,
 	}
 }
 
@@ -53,7 +56,7 @@ func (c *Client) BroadcastTx(tx []byte) (*tendermintPb.ResultBroadcastTx, error)
 	}
 
 	signedJson, _ := protojson.Marshal(signed)
-	fmt.Printf("submitting tx to sequencer: %s\n", signedJson)
+	c.logger.Info("Submitting tx to sequencer", "signedTx", signedJson)
 
 	resp, err := c.Client.BroadcastTxSync(context.Background(), signed)
 	if err != nil {

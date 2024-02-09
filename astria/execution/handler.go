@@ -1,11 +1,11 @@
 package execution
 
 import (
-	log "log/slog"
 	"net"
 	"sync"
 
 	astriaGrpc "buf.build/gen/go/astria/execution-apis/grpc/go/astria/execution/v1alpha2/executionv1alpha2grpc"
+	"github.com/cometbft/cometbft/libs/log"
 	"google.golang.org/grpc"
 )
 
@@ -17,20 +17,22 @@ type GRPCServerHandler struct {
 	endpoint                   string
 	server                     *grpc.Server
 	executionServiceServerV1a2 *astriaGrpc.ExecutionServiceServer
+	logger                     log.Logger
 }
 
 // NewServer creates a new gRPC server.
 // It registers the execution service server.
 // It registers the gRPC server with the node so it can be stopped on shutdown.
-func NewGRPCServerHandler(execServ astriaGrpc.ExecutionServiceServer, endpoint string) *GRPCServerHandler {
+func NewGRPCServerHandler(execServ astriaGrpc.ExecutionServiceServer, endpoint string, logger log.Logger) *GRPCServerHandler {
 	server := grpc.NewServer()
 
-	log.Info("gRPC server enabled", "endpoint", endpoint)
+	logger.Info("gRPC server enabled", "endpoint", endpoint)
 
 	handler := &GRPCServerHandler{
 		endpoint:                   endpoint,
 		server:                     server,
 		executionServiceServerV1a2: &execServ,
+		logger:                     logger,
 	}
 
 	astriaGrpc.RegisterExecutionServiceServer(server, execServ)
@@ -49,10 +51,11 @@ func (handler *GRPCServerHandler) Start() error {
 	// Start the gRPC server
 	lis, err := net.Listen("tcp", handler.endpoint)
 	if err != nil {
+		handler.logger.Error("gRPC server could not be started", "err", err)
 		return err
 	}
 	go handler.server.Serve(lis)
-	log.Info("gRPC server started", "endpoint", handler.endpoint)
+	handler.logger.Info("gRPC server started", "endpoint", handler.endpoint)
 	return nil
 }
 
@@ -62,6 +65,6 @@ func (handler *GRPCServerHandler) Stop() error {
 	defer handler.mu.Unlock()
 
 	handler.server.GracefulStop()
-	log.Info("gRPC server stopped", "endpoint", handler.endpoint)
+	handler.logger.Info("gRPC server stopped", "endpoint", handler.endpoint)
 	return nil
 }

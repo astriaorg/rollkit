@@ -57,7 +57,7 @@ func (mr *MempoolReaper) Reap() {
 					if err != nil {
 						panic(fmt.Sprintf("error sending message: %s\n", err))
 					}
-					println(res.Log)
+					mr.logger.Debug("tx response", "log", res.Log)
 
 					// wait for next tx
 					tx0 = tx0.NextWait()

@@ -27,6 +27,7 @@ import (
 	"github.com/astriaorg/rollkit/astria/execution"
 	astriamempool "github.com/astriaorg/rollkit/astria/mempool"
 	"github.com/astriaorg/rollkit/astria/sequencer"
+	"github.com/astriaorg/rollkit/astria/state/commitment"
 	"github.com/astriaorg/rollkit/block"
 	"github.com/astriaorg/rollkit/config"
 	"github.com/astriaorg/rollkit/mempool"
@@ -41,8 +42,9 @@ import (
 
 // prefixes used in KV store to separate main node data from DALC data
 var (
-	mainPrefix    = "0"
-	indexerPrefix = "2" // indexPrefix uses "i", so using "0-2" to avoid clash
+	mainPrefix       = "0"
+	indexerPrefix    = "1" // indexPrefix uses "i", so using "0-2" to avoid clash
+	commitmentPrefix = "2"
 )
 
 const (
@@ -66,14 +68,9 @@ type FullNode struct {
 
 	proxyApp proxy.AppConns
 	eventBus *cmtypes.EventBus
-	// dalc         *da.DAClient
-	// p2pClient    *p2p.Client
-	// hSyncService *block.HeaderSyncService
-	// bSyncService *block.BlockSyncService
 
 	// TODO(tzdybal): consider extracting "mempool reactor"
 	Mempool      mempool.Mempool
-	mempoolIDs   *mempoolIDs
 	Store        store.Store
 	BlockManager *block.SSManager
 	client       rpcclient.Client
@@ -184,39 +181,33 @@ func newFullNode(
 		return nil, err
 	}
 	private := ed25519.NewKeyFromSeed(privateKeyBytes)
-	seqClient := sequencer.NewClient(nodeConfig.Astria.SeqAddress, private, execGenesisInfo.RollupId)
-	reaper := astriamempool.NewMempoolReaper(seqClient, mempool, logger)
+	seqClient := sequencer.NewClient(nodeConfig.Astria.SeqAddress, private, execGenesisInfo.RollupId, logger.With("module", "seqclient"))
+	reaper := astriamempool.NewMempoolReaper(seqClient, mempool, logger.With("module", "reaper"))
 
 	// init grpc execution api
-	serviceV1a2 := execution.NewExecutionServiceServerV1Alpha2(blockManager, execGenesisInfo, store, logger)
-	grpcServerHandler := execution.NewGRPCServerHandler(serviceV1a2, nodeConfig.Astria.GrpcListen)
+	commitmentStore := commitment.NewCommitmentState(ctx, newPrefixKV(baseKV, commitmentPrefix))
+	serviceV1a2 := execution.NewExecutionServiceServerV1Alpha2(blockManager, execGenesisInfo, commitmentStore, store, logger.With("module", "execution"))
+	grpcServerHandler := execution.NewGRPCServerHandler(serviceV1a2, nodeConfig.Astria.GrpcListen, logger.With("module", "execution"))
 
 	node := &FullNode{
-		proxyApp:   proxyApp,
-		eventBus:   eventBus,
-		genesis:    genesis,
-		nodeConfig: nodeConfig,
-		// p2pClient:      p2pClient,
-		BlockManager: blockManager,
-		// dalc:           dalc,
-		Mempool:        mempool,
-		mempoolIDs:     newMempoolIDs(),
-		Store:          store,
-		TxIndexer:      txIndexer,
-		IndexerService: indexerService,
-		BlockIndexer:   blockIndexer,
-		// hSyncService:   headerSyncService,
-		// bSyncService:   blockSyncService,
-		ctx:           ctx,
-		cancel:        cancel,
-		threadManager: types.NewThreadManager(),
-
+		proxyApp:          proxyApp,
+		eventBus:          eventBus,
+		genesis:           genesis,
+		nodeConfig:        nodeConfig,
+		BlockManager:      blockManager,
+		Mempool:           mempool,
+		Store:             store,
+		TxIndexer:         txIndexer,
+		IndexerService:    indexerService,
+		BlockIndexer:      blockIndexer,
+		ctx:               ctx,
+		cancel:            cancel,
+		threadManager:     types.NewThreadManager(),
 		reaper:            reaper,
 		grpcServerHandler: grpcServerHandler,
 	}
 
 	node.BaseService = *service.NewBaseService(logger, "Node", node)
-	// node.p2pClient.SetTxValidator(node.newTxValidator(p2pMetrics))
 	node.client = NewFullClient(node)
 
 	return node, nil

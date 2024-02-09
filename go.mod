@@ -33,7 +33,7 @@ require (
 )
 
 require (
-	buf.build/gen/go/astria/astria/protocolbuffers/go v1.32.0-20240208041217-cec081a8099b.1
+	buf.build/gen/go/astria/astria/protocolbuffers/go v1.32.0-20240208213846-0e715ec578d3.1
 	buf.build/gen/go/astria/execution-apis/grpc/go v1.3.0-20240207231045-2f6384a93a8d.2
 	buf.build/gen/go/astria/execution-apis/protocolbuffers/go v1.32.0-20240207231045-2f6384a93a8d.1
 	github.com/astriaorg/go-sequencer-client v0.0.0-20231201013457-0df599de8e74
