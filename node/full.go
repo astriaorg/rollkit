@@ -27,7 +27,6 @@ import (
 	"github.com/astriaorg/rollkit/astria/execution"
 	astriamempool "github.com/astriaorg/rollkit/astria/mempool"
 	"github.com/astriaorg/rollkit/astria/sequencer"
-	"github.com/astriaorg/rollkit/astria/state/commitment"
 	"github.com/astriaorg/rollkit/block"
 	"github.com/astriaorg/rollkit/config"
 	"github.com/astriaorg/rollkit/mempool"
@@ -167,12 +166,15 @@ func newFullNode(
 		return nil, err
 	}
 
+	blockManager.CheckCrashRecovery(ctx)
+
 	// genesis info for exec api & sequencer client
 	execGenesisInfo := execution.GenesisInfo{
 		RollupId:                    sha256.Sum256([]byte(genesis.ChainID)),
 		SequencerGenesisBlockHeight: nodeConfig.Astria.SeqInitialHeight,
 		CelestiaBaseBlockHeight:     nodeConfig.DAStartHeight,
 		CelestiaBlockVariance:       nodeConfig.DAVariance,
+		GenesisTime:                 genesis.GenesisTime,
 	}
 
 	// init mempool reaper
@@ -185,8 +187,7 @@ func newFullNode(
 	reaper := astriamempool.NewMempoolReaper(seqClient, mempool, logger.With("module", "reaper"))
 
 	// init grpc execution api
-	commitmentStore := commitment.NewCommitmentState(ctx, newPrefixKV(baseKV, commitmentPrefix))
-	serviceV1a2 := execution.NewExecutionServiceServerV1Alpha2(blockManager, execGenesisInfo, commitmentStore, store, logger.With("module", "execution"))
+	serviceV1a2 := execution.NewExecutionServiceServerV1Alpha2(blockManager, execGenesisInfo, store, logger.With("module", "execution"))
 	grpcServerHandler := execution.NewGRPCServerHandler(serviceV1a2, nodeConfig.Astria.GrpcListen, logger.With("module", "execution"))
 
 	node := &FullNode{
@@ -272,7 +273,7 @@ func initMempool(logger log.Logger, proxyApp proxy.AppConns, memplMetrics *mempo
 // }
 
 func initBlockManager(signingKey crypto.PrivKey, nodeConfig config.NodeConfig, genesis *cmtypes.GenesisDoc, store store.Store, mempool mempool.Mempool, proxyApp proxy.AppConns, eventBus *cmtypes.EventBus, logger log.Logger, seqMetrics *block.Metrics, execMetrics *state.Metrics) (*block.SSManager, error) {
-	blockManager, err := block.NewSSManager(signingKey, nodeConfig.BlockManagerConfig, genesis, store, mempool, proxyApp.Consensus(), eventBus, logger.With("module", "BlockManager"), seqMetrics, execMetrics)
+	blockManager, err := block.NewSSManager(signingKey, nodeConfig.BlockManagerConfig, genesis, store, mempool, proxyApp, eventBus, logger.With("module", "BlockManager"), seqMetrics, execMetrics)
 	if err != nil {
 		return nil, fmt.Errorf("error while initializing BlockManager: %w", err)
 	}

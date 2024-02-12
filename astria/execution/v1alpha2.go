@@ -3,10 +3,10 @@ package execution
 import (
 	"context"
 	"sync"
+	"time"
 
 	astriaGrpc "buf.build/gen/go/astria/execution-apis/grpc/go/astria/execution/v1alpha2/executionv1alpha2grpc"
 	astriaPb "buf.build/gen/go/astria/execution-apis/protocolbuffers/go/astria/execution/v1alpha2"
-	"github.com/astriaorg/rollkit/astria/state/commitment"
 	"github.com/astriaorg/rollkit/block"
 	"github.com/astriaorg/rollkit/store"
 	"github.com/astriaorg/rollkit/types"
@@ -23,12 +23,12 @@ type ExecutionServiceServerV1Alpha2 struct {
 	// UnimplementedExecutionServiceServer for forward compatibility
 	astriaGrpc.UnimplementedExecutionServiceServer
 
-	commitmentStore    *commitment.CommitmentState
-	store              store.Store
-	blockManager       *block.SSManager
-	genesis            GenesisInfo
-	logger             log.Logger
-	blockExecutionLock sync.Mutex
+	store                 store.Store
+	blockManager          *block.SSManager
+	genesis               GenesisInfo
+	logger                log.Logger
+	blockExecutionLock    sync.Mutex
+	commitementUpdateLock sync.Mutex
 }
 
 type GenesisInfo struct {
@@ -36,15 +36,15 @@ type GenesisInfo struct {
 	SequencerGenesisBlockHeight uint64
 	CelestiaBaseBlockHeight     uint64
 	CelestiaBlockVariance       uint64
+	GenesisTime                 time.Time
 }
 
-func NewExecutionServiceServerV1Alpha2(blockManager *block.SSManager, genesis GenesisInfo, commitmentStore *commitment.CommitmentState, store store.Store, logger log.Logger) *ExecutionServiceServerV1Alpha2 {
+func NewExecutionServiceServerV1Alpha2(blockManager *block.SSManager, genesis GenesisInfo, store store.Store, logger log.Logger) *ExecutionServiceServerV1Alpha2 {
 	return &ExecutionServiceServerV1Alpha2{
-		blockManager:    blockManager,
-		genesis:         genesis,
-		commitmentStore: commitmentStore,
-		store:           store,
-		logger:          logger,
+		blockManager: blockManager,
+		genesis:      genesis,
+		store:        store,
+		logger:       logger,
 	}
 }
 
@@ -119,9 +119,9 @@ func (s *ExecutionServiceServerV1Alpha2) ExecuteBlock(ctx context.Context, req *
 		txs[i] = types.Tx(req.Transactions[i])
 	}
 
-	block, err := s.blockManager.PublishBlock(ctx, types.Hash(req.PrevBlockHash), req.Timestamp.AsTime(), txs)
+	block, err := s.blockManager.ExecuteBlock(ctx, types.Hash(req.PrevBlockHash), req.Timestamp.AsTime(), txs)
 	if err != nil {
-		s.logger.Error("Failed to publish block to chain", "hash", block.Hash(), "prevHash", types.Hash(req.PrevBlockHash), "err", err)
+		s.logger.Error("Failed to publish new block to chain", "prevHash", types.Hash(req.PrevBlockHash), "err", err)
 		return nil, status.Error(codes.Internal, "failed to insert block to chain")
 	}
 
@@ -150,14 +150,14 @@ func (s *ExecutionServiceServerV1Alpha2) GetCommitmentState(ctx context.Context,
 	reqJson, _ := protojson.Marshal(req)
 	s.logger.Info("GetCommitmentState called", "request", reqJson)
 
-	res, err := s.commitmentStore.GetCommitmentState()
-	if err != nil {
-		s.logger.Error("GetCommitmentState failed", "err", err)
-		return &astriaPb.CommitmentState{}, err
+	res := &astriaPb.CommitmentState{
+		Soft: s.getPbBlock(ctx, s.blockManager.GetStoreHeight()),
+		Firm: s.getPbBlock(ctx, s.blockManager.GetDAHeight()),
 	}
 
 	resJson, _ := protojson.Marshal(res)
 	s.logger.Info("GetCommitmentState completed", "response", resJson)
+
 	return res, nil
 }
 
@@ -166,11 +166,26 @@ func (s *ExecutionServiceServerV1Alpha2) UpdateCommitmentState(ctx context.Conte
 	reqJson, _ := protojson.Marshal(req)
 	s.logger.Info("UpdateCommitmentState called", "request", reqJson)
 
-	if err := s.commitmentStore.UpdateCommitmentState(req.CommitmentState); err != nil {
+	s.commitementUpdateLock.Lock()
+	defer s.commitementUpdateLock.Unlock()
+
+	currHeight := s.blockManager.GetStoreHeight()
+	if uint64(req.CommitmentState.Soft.Number) > currHeight {
+		err := s.blockManager.Commit(ctx, uint64(req.CommitmentState.Soft.Number), false)
+		if err != nil {
+			s.logger.Error("UpdateCommitmentState failed", "err", err)
+		}
+	}
+
+	err := s.blockManager.SetDAHeight(ctx, uint64(req.CommitmentState.Firm.Number))
+	if err != nil {
 		s.logger.Error("UpdateCommitmentState failed", "err", err)
 	}
 
-	return req.CommitmentState, nil
+	return &astriaPb.CommitmentState{
+		Soft: s.getPbBlock(ctx, s.blockManager.GetStoreHeight()),
+		Firm: req.CommitmentState.Firm,
+	}, nil
 }
 
 func (s *ExecutionServiceServerV1Alpha2) getBlockFromIdentifier(ctx context.Context, identifier *astriaPb.BlockIdentifier) (*astriaPb.Block, error) {
@@ -202,4 +217,36 @@ func (s *ExecutionServiceServerV1Alpha2) getBlockFromIdentifier(ctx context.Cont
 		ParentBlockHash: cmbytes.HexBytes(block.LastHeader()),
 		Timestamp:       timestamppb.New(block.Time()),
 	}, nil
+}
+
+func (s *ExecutionServiceServerV1Alpha2) getPbBlock(ctx context.Context, height uint64) *astriaPb.Block {
+	genHash := [32]byte{0x0}
+	if height == 0 {
+		return &astriaPb.Block{
+			Number:          uint32(0),
+			Hash:            genHash[:],
+			ParentBlockHash: genHash[:],
+			Timestamp:       timestamppb.New(s.genesis.GenesisTime),
+		}
+	} else {
+		block, err := s.store.GetBlock(ctx, height)
+		if err != nil {
+			s.logger.Error("failed finding block with height", "height", height, "error", err)
+			return nil
+		}
+
+		var parentBlockHash []byte
+		if height == 1 {
+			parentBlockHash = genHash[:]
+		} else {
+			parentBlockHash = cmbytes.HexBytes(block.LastHeader())
+		}
+
+		return &astriaPb.Block{
+			Number:          uint32(block.Height()),
+			Hash:            cmbytes.HexBytes(block.Hash()),
+			ParentBlockHash: parentBlockHash,
+			Timestamp:       timestamppb.New(block.Time()),
+		}
+	}
 }

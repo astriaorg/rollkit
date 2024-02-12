@@ -3,7 +3,6 @@ package block
 import (
 	"bytes"
 	"context"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"sync"
@@ -35,6 +34,7 @@ type SSManager struct {
 	proposerKey  crypto.PrivKey
 	executor     *state.BlockExecutor
 	logger       log.Logger
+	proxyApp     proxy.AppConns
 
 	// Rollkit doesn't have "validators", but
 	// we store the sequencer in this struct for compatibility.
@@ -51,7 +51,7 @@ func NewSSManager(
 	genesis *cmtypes.GenesisDoc,
 	store store.Store,
 	mempool mempool.Mempool,
-	proxyApp proxy.AppConnConsensus,
+	proxyApp proxy.AppConns,
 	eventBus *cmtypes.EventBus,
 	logger log.Logger,
 	seqMetrics *Metrics,
@@ -70,7 +70,7 @@ func NewSSManager(
 		return nil, err
 	}
 
-	exec := state.NewBlockExecutor(proposerAddress, genesis.ChainID, mempool, proxyApp, eventBus, logger, execMetrics)
+	exec := state.NewBlockExecutor(proposerAddress, genesis.ChainID, mempool, proxyApp.Consensus(), eventBus, logger, execMetrics)
 	if s.LastBlockHeight+1 == uint64(genesis.InitialHeight) {
 		logger.Info("Initializing chain")
 		res, err := exec.InitChain(genesis)
@@ -95,8 +95,29 @@ func NewSSManager(
 		logger:       logger,
 		validatorSet: &valSet,
 		metrics:      seqMetrics,
+		proxyApp:     proxyApp,
 	}
 	return agg, nil
+}
+
+func (m *SSManager) CheckCrashRecovery(ctx context.Context) error {
+	m.logger.Info("checking for crash recovery")
+	res, err := m.proxyApp.Query().Info(ctx, proxy.RequestInfo)
+	if err != nil {
+		return fmt.Errorf("error calling proxyApp.Query().Info: %v", err)
+	}
+	m.logger.Info("app handshake", "LastBlockHeight", res.LastBlockHeight, "LastBlockAppHash", res.LastBlockAppHash)
+	storeHeight := m.GetStoreHeight()
+	if storeHeight != uint64(res.LastBlockHeight) {
+		m.logger.Info("store height and app height mismatch", "store_height", storeHeight, "app_height", res.LastBlockHeight)
+		if res.LastBlockHeight-int64(storeHeight) == 1 {
+			m.logger.Info("committing block", "height", res.LastBlockHeight)
+			m.Commit(ctx, uint64(res.LastBlockHeight), true)
+		} else {
+			panic("what do")
+		}
+	}
+	return nil
 }
 
 // SetLastState is used to set lastState used by Manager.
@@ -109,6 +130,25 @@ func (m *SSManager) SetLastState(state types.State) {
 // GetStoreHeight returns the manager's store height
 func (m *SSManager) GetStoreHeight() uint64 {
 	return m.store.Height()
+}
+
+func (m *SSManager) GetLastState() types.State {
+	return m.lastState
+}
+
+func (m *SSManager) GetDAHeight() uint64 {
+	return m.lastState.DAHeight
+}
+
+func (m *SSManager) SetDAHeight(ctx context.Context, height uint64) error {
+	m.lastStateMtx.Lock()
+	defer m.lastStateMtx.Unlock()
+	m.lastState.DAHeight = height
+	err := m.store.UpdateState(ctx, m.lastState)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (m *SSManager) getCommit(header types.Header) (*types.Commit, error) {
@@ -125,7 +165,7 @@ func (m *SSManager) getCommit(header types.Header) (*types.Commit, error) {
 	}, nil
 }
 
-func (m *SSManager) PublishBlock(ctx context.Context, prevBlockHash types.Hash, timestamp time.Time, txs types.Txs) (*types.Block, error) {
+func (m *SSManager) ExecuteBlock(ctx context.Context, prevBlockHash types.Hash, timestamp time.Time, txs types.Txs) (*types.Block, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -153,7 +193,7 @@ func (m *SSManager) PublishBlock(ctx context.Context, prevBlockHash types.Hash, 
 		// Validate block being created has valid previous hash
 		lastHeaderHash = lastBlock.Hash()
 		if !bytes.Equal(lastHeaderHash, prevBlockHash) {
-			return nil, fmt.Errorf("block can only be created on top of soft block.")
+			return nil, fmt.Errorf("block can only be created on top of soft block. Last recorded block height: %d, hash: %s", height, lastBlock.Hash())
 		}
 	}
 
@@ -199,7 +239,23 @@ func (m *SSManager) PublishBlock(ctx context.Context, prevBlockHash types.Hash, 
 
 	block.SignedHeader.Validators = m.validatorSet
 
-	newState, responses, err := m.applyBlock(ctx, block)
+	if pendingBlock == nil {
+		isAppValid, err := m.executor.ProcessProposal(block, m.lastState)
+		if err != nil {
+			return nil, err
+		}
+		if !isAppValid {
+			return nil, fmt.Errorf("error while processing the proposal: %v", err)
+		}
+
+		// SaveBlock commits the DB tx
+		err = m.store.SaveBlock(ctx, block, commit)
+		if err != nil {
+			return nil, fmt.Errorf("error while saving block: %w", err)
+		}
+	}
+
+	responses, err := m.applyBlock(ctx, block)
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, fmt.Errorf("error while applying block: %w", err)
@@ -228,19 +284,11 @@ func (m *SSManager) PublishBlock(ctx context.Context, prevBlockHash types.Hash, 
 	}
 
 	blockHeight := block.Height()
-	// Update the stored height before submitting to the DA layer and committing to the DB
-	m.store.SetHeight(ctx, blockHeight)
 
 	// SaveBlock commits the DB tx
 	err = m.store.SaveBlock(ctx, block, commit)
 	if err != nil {
 		return nil, fmt.Errorf("error while saving block: %w", err)
-	}
-
-	// Commit the new state and block which writes to disk on the proxy app
-	_, _, err = m.executor.Commit(ctx, newState, block, responses)
-	if err != nil {
-		return nil, fmt.Errorf("error while committing block: %w", err)
 	}
 
 	// SaveBlockResponses commits the DB tx
@@ -249,18 +297,52 @@ func (m *SSManager) PublishBlock(ctx context.Context, prevBlockHash types.Hash, 
 		return nil, fmt.Errorf("error while saving block responses: %w", err)
 	}
 
+	return block, nil
+}
+
+func (m *SSManager) Commit(ctx context.Context, height uint64, skipExec bool) error {
+	currHeight := m.store.Height()
+	if height != currHeight+1 {
+		m.logger.Error("Trying to commit invalid height", "currHeight", currHeight, "newHeight", height)
+		return fmt.Errorf("cannot commit an invalid height: current height %d, new height %d", currHeight, height)
+	}
+
+	pendingBlock, err := m.store.GetBlock(ctx, height)
+	if err != nil {
+		return fmt.Errorf("error while loading block: %w", err)
+	}
+
+	blockResponses, err := m.store.GetBlockResponses(ctx, height)
+	if err != nil {
+		return err
+	}
+
+	newState, err := m.executor.UpdateState(m.lastState, pendingBlock, blockResponses)
+	if err != nil {
+		return err
+	}
+
+	// Update the stored height
+	m.store.SetHeight(ctx, height)
+
+	// Commit the new state and block which writes to disk on the proxy app
+	_, err = m.executor.Commit(ctx, newState, pendingBlock, blockResponses, skipExec)
+	if err != nil {
+		return fmt.Errorf("error while committing block: %w", err)
+	}
+
 	// After this call m.lastState is the NEW state returned from ApplyBlock
 	// updateState also commits the DB tx
 	err = m.updateState(ctx, newState)
 	if err != nil {
-		return nil, fmt.Errorf("error while updating state: %w", err)
+		return fmt.Errorf("error while updating state: %w", err)
 	}
 
-	m.recordMetrics(block)
+	m.recordMetrics(pendingBlock)
 
-	m.logger.Debug("successfully proposed block", "proposer", hex.EncodeToString(block.SignedHeader.ProposerAddress), "height", blockHeight)
+	m.logger.Info("Successfully commited height", "height", height)
 
-	return block, nil
+	return nil
 }
 
 func (m *SSManager) recordMetrics(block *types.Block) {
@@ -295,7 +377,7 @@ func (m *SSManager) createBlock(height uint64, timestamp time.Time, txs types.Tx
 	return m.executor.CreateBlockFromSeqencer(height, timestamp, txs, lastCommit, lastHeaderHash, m.lastState)
 }
 
-func (m *SSManager) applyBlock(ctx context.Context, block *types.Block) (types.State, *abci.ResponseFinalizeBlock, error) {
+func (m *SSManager) applyBlock(ctx context.Context, block *types.Block) (*abci.ResponseFinalizeBlock, error) {
 	m.lastStateMtx.RLock()
 	defer m.lastStateMtx.RUnlock()
 	return m.executor.ApplyBlock(ctx, m.lastState, block)

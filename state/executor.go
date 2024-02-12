@@ -275,53 +275,44 @@ func (e *BlockExecutor) ProcessProposal(
 }
 
 // ApplyBlock validates and executes the block.
-func (e *BlockExecutor) ApplyBlock(ctx context.Context, state types.State, block *types.Block) (types.State, *abci.ResponseFinalizeBlock, error) {
-	isAppValid, err := e.ProcessProposal(block, state)
-	if err != nil {
-		return types.State{}, nil, err
-	}
-	if !isAppValid {
-		return types.State{}, nil, fmt.Errorf("error while processing the proposal: %v", err)
-	}
+func (e *BlockExecutor) ApplyBlock(ctx context.Context, state types.State, block *types.Block) (*abci.ResponseFinalizeBlock, error) {
+	// isAppValid, err := e.ProcessProposal(block, state)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// if !isAppValid {
+	// 	return nil, fmt.Errorf("error while processing the proposal: %v", err)
+	// }
 
-	err = e.Validate(state, block)
+	err := e.Validate(state, block)
 	if err != nil {
-		return types.State{}, nil, err
+		return nil, err
 	}
 	// This makes calls to the AppClient
 	resp, err := e.execute(ctx, state, block)
 	if err != nil {
-		return types.State{}, nil, err
+		return nil, err
 	}
 
 	if resp.ConsensusParamUpdates != nil {
 		e.metrics.ConsensusParamUpdates.Add(1)
 	}
 
-	state, err = e.updateState(state, block, resp)
-	if err != nil {
-		return types.State{}, nil, err
-	}
-
-	if state.ConsensusParams.Block.MaxBytes == 0 {
-		e.logger.Error("maxBytes=0", "state.ConsensusParams.Block", state.ConsensusParams.Block, "block", block)
-	}
-
-	return state, resp, nil
+	return resp, nil
 }
 
 // Commit commits the block
-func (e *BlockExecutor) Commit(ctx context.Context, state types.State, block *types.Block, resp *abci.ResponseFinalizeBlock) ([]byte, uint64, error) {
-	appHash, retainHeight, err := e.commit(ctx, state, block, resp)
+func (e *BlockExecutor) Commit(ctx context.Context, state types.State, block *types.Block, resp *abci.ResponseFinalizeBlock, skipExec bool) ([]byte, error) {
+	appHash, err := e.commit(ctx, state, block, resp, skipExec)
 	if err != nil {
-		return []byte{}, 0, err
+		return []byte{}, err
 	}
 
 	state.AppHash = appHash
 
 	e.publishEvents(resp, block, state)
 
-	return appHash, retainHeight, nil
+	return appHash, nil
 }
 
 // updateConsensusParams updates the consensus parameters based on the provided updates.
@@ -336,7 +327,7 @@ func (e *BlockExecutor) updateConsensusParams(height uint64, params cmtypes.Cons
 	return nextParams.ToProto(), nextParams.Version.App, nil
 }
 
-func (e *BlockExecutor) updateState(state types.State, block *types.Block, finalizeBlockResponse *abci.ResponseFinalizeBlock) (types.State, error) {
+func (e *BlockExecutor) UpdateState(state types.State, block *types.Block, finalizeBlockResponse *abci.ResponseFinalizeBlock) (types.State, error) {
 	height := block.Height()
 	if finalizeBlockResponse.ConsensusParamUpdates != nil {
 		nextParamsProto, appVersion, err := e.updateConsensusParams(height, types.ConsensusParamsFromProto(state.ConsensusParams), finalizeBlockResponse.ConsensusParamUpdates)
@@ -362,34 +353,41 @@ func (e *BlockExecutor) updateState(state types.State, block *types.Block, final
 		ConsensusParams:                  state.ConsensusParams,
 		LastHeightConsensusParamsChanged: state.LastHeightConsensusParamsChanged,
 		AppHash:                          finalizeBlockResponse.AppHash,
+		DAHeight:                         state.DAHeight,
 	}
 	copy(s.LastResultsHash[:], cmtypes.NewResults(finalizeBlockResponse.TxResults).Hash())
+
+	if s.ConsensusParams.Block.MaxBytes == 0 {
+		e.logger.Error("maxBytes=0", "state.ConsensusParams.Block", state.ConsensusParams.Block, "block", block)
+	}
 
 	return s, nil
 }
 
-func (e *BlockExecutor) commit(ctx context.Context, state types.State, block *types.Block, resp *abci.ResponseFinalizeBlock) ([]byte, uint64, error) {
+func (e *BlockExecutor) commit(ctx context.Context, state types.State, block *types.Block, resp *abci.ResponseFinalizeBlock, skipExec bool) ([]byte, error) {
 	e.mempool.Lock()
 	defer e.mempool.Unlock()
 
 	err := e.mempool.FlushAppConn()
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 
-	commitResp, err := e.proxyApp.Commit(ctx)
-	if err != nil {
-		return nil, 0, err
+	if skipExec == false {
+		_, err = e.proxyApp.Commit(ctx)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	maxBytes := state.ConsensusParams.Block.MaxBytes
 	maxGas := state.ConsensusParams.Block.MaxGas
 	err = e.mempool.Update(block.Height(), fromRollkitTxs(block.Data.Txs), resp.TxResults, mempool.PreCheckMaxBytes(maxBytes), mempool.PostCheckMaxGas(maxGas))
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 
-	return resp.AppHash, uint64(commitResp.RetainHeight), err
+	return resp.AppHash, err
 }
 
 // Validate validates the state and the block for the executor

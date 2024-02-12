@@ -69,7 +69,7 @@ func NewFromGenesisDoc(genDoc *types.GenesisDoc) (State, error) {
 		ChainID:       genDoc.ChainID,
 		InitialHeight: uint64(genDoc.InitialHeight),
 
-		DAHeight: 1,
+		DAHeight: 0,
 
 		LastBlockHeight: uint64(genDoc.InitialHeight) - 1,
 		LastBlockID:     types.BlockID{},
