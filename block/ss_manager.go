@@ -10,6 +10,7 @@ import (
 
 	abci "github.com/cometbft/cometbft/abci/types"
 	cmcrypto "github.com/cometbft/cometbft/crypto"
+	"github.com/cometbft/cometbft/crypto/ed25519"
 	"github.com/cometbft/cometbft/crypto/merkle"
 	"github.com/cometbft/cometbft/proxy"
 	cmtypes "github.com/cometbft/cometbft/types"
@@ -31,7 +32,6 @@ type SSManager struct {
 	store        store.Store
 	conf         config.BlockManagerConfig
 	genesis      *cmtypes.GenesisDoc
-	proposerKey  crypto.PrivKey
 	executor     *state.BlockExecutor
 	logger       log.Logger
 	proxyApp     proxy.AppConns
@@ -39,6 +39,7 @@ type SSManager struct {
 	// Rollkit doesn't have "validators", but
 	// we store the sequencer in this struct for compatibility.
 	validatorSet *cmtypes.ValidatorSet
+	proposerKey  cmcrypto.PrivKey
 
 	// for reporting metrics
 	metrics *Metrics
@@ -46,7 +47,6 @@ type SSManager struct {
 
 // NewManager creates new block Manager.
 func NewSSManager(
-	proposerKey crypto.PrivKey,
 	conf config.BlockManagerConfig,
 	genesis *cmtypes.GenesisDoc,
 	store store.Store,
@@ -61,16 +61,11 @@ func NewSSManager(
 	if err != nil {
 		return nil, err
 	}
-	// genesis should have exactly one "validator", the centralized sequencer.
-	// this should have been validated in the above call to getInitialState.
-	valSet := types.GetValidatorSetFromGenesis(genesis)
 
-	proposerAddress, err := getAddress(proposerKey)
-	if err != nil {
-		return nil, err
-	}
+	nullKey := ed25519.GenPrivKeyFromSecret([]byte{0x00})
+	proposer := nullKey.PubKey().Address()
 
-	exec := state.NewBlockExecutor(proposerAddress, genesis.ChainID, mempool, proxyApp.Consensus(), eventBus, logger, execMetrics)
+	exec := state.NewBlockExecutor(proposer, genesis.ChainID, mempool, proxyApp.Consensus(), eventBus, logger, execMetrics)
 	if s.LastBlockHeight+1 == uint64(genesis.InitialHeight) {
 		logger.Info("Initializing chain")
 		res, err := exec.InitChain(genesis)
@@ -84,8 +79,9 @@ func NewSSManager(
 		}
 	}
 
+	nullValidator := cmtypes.NewValidator(nullKey.PubKey(), 1)
+
 	agg := &SSManager{
-		proposerKey:  proposerKey,
 		conf:         conf,
 		genesis:      genesis,
 		lastState:    s,
@@ -93,7 +89,8 @@ func NewSSManager(
 		executor:     exec,
 		lastStateMtx: new(sync.RWMutex),
 		logger:       logger,
-		validatorSet: &valSet,
+		validatorSet: cmtypes.NewValidatorSet([]*cmtypes.Validator{nullValidator}),
+		proposerKey:  nullKey,
 		metrics:      seqMetrics,
 		proxyApp:     proxyApp,
 	}

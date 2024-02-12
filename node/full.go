@@ -13,7 +13,6 @@ import (
 
 	ds "github.com/ipfs/go-datastore"
 	ktds "github.com/ipfs/go-datastore/keytransform"
-	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
@@ -95,8 +94,8 @@ type FullNode struct {
 func newFullNode(
 	ctx context.Context,
 	nodeConfig config.NodeConfig,
-	p2pKey crypto.PrivKey,
-	signingKey crypto.PrivKey,
+	// p2pKey crypto.PrivKey,
+	// signingKey crypto.PrivKey,
 	clientCreator proxy.ClientCreator,
 	genesis *cmtypes.GenesisDoc,
 	metricsProvider MetricsProvider,
@@ -155,7 +154,7 @@ func newFullNode(
 	mempool := initMempool(logger, proxyApp, memplMetrics)
 
 	store := store.New(mainKV)
-	blockManager, err := initBlockManager(signingKey, nodeConfig, genesis, store, mempool, proxyApp, eventBus, logger, seqMetrics, smMetrics)
+	blockManager, err := initBlockManager(nodeConfig, genesis, store, mempool, proxyApp, eventBus, logger, seqMetrics, smMetrics)
 	if err != nil {
 		return nil, err
 	}
@@ -272,8 +271,8 @@ func initMempool(logger log.Logger, proxyApp proxy.AppConns, memplMetrics *mempo
 // 	return blockSyncService, nil
 // }
 
-func initBlockManager(signingKey crypto.PrivKey, nodeConfig config.NodeConfig, genesis *cmtypes.GenesisDoc, store store.Store, mempool mempool.Mempool, proxyApp proxy.AppConns, eventBus *cmtypes.EventBus, logger log.Logger, seqMetrics *block.Metrics, execMetrics *state.Metrics) (*block.SSManager, error) {
-	blockManager, err := block.NewSSManager(signingKey, nodeConfig.BlockManagerConfig, genesis, store, mempool, proxyApp, eventBus, logger.With("module", "BlockManager"), seqMetrics, execMetrics)
+func initBlockManager(nodeConfig config.NodeConfig, genesis *cmtypes.GenesisDoc, store store.Store, mempool mempool.Mempool, proxyApp proxy.AppConns, eventBus *cmtypes.EventBus, logger log.Logger, seqMetrics *block.Metrics, execMetrics *state.Metrics) (*block.SSManager, error) {
+	blockManager, err := block.NewSSManager(nodeConfig.BlockManagerConfig, genesis, store, mempool, proxyApp, eventBus, logger.With("module", "BlockManager"), seqMetrics, execMetrics)
 	if err != nil {
 		return nil, fmt.Errorf("error while initializing BlockManager: %w", err)
 	}
