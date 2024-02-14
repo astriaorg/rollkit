@@ -15,7 +15,6 @@ import (
 	"github.com/cometbft/cometbft/proxy"
 	cmtypes "github.com/cometbft/cometbft/types"
 	ds "github.com/ipfs/go-datastore"
-	"github.com/libp2p/go-libp2p/core/crypto"
 
 	"github.com/astriaorg/rollkit/config"
 	"github.com/astriaorg/rollkit/mempool"
@@ -62,7 +61,12 @@ func NewSSManager(
 		return nil, err
 	}
 
+	// Generate a private key from a null secret.
+	// Since a shared sequencer is providing consensus, we do this for compatibility when building &
+	// validating blocks, so all nodes build the same blocks.
 	nullKey := ed25519.GenPrivKeyFromSecret([]byte{0x00})
+
+	// Set block proposer to the "null key" address for now; maybe use astria proposer in future?
 	proposer := nullKey.PubKey().Address()
 
 	exec := state.NewBlockExecutor(proposer, genesis.ChainID, mempool, proxyApp.Consensus(), eventBus, logger, execMetrics)
@@ -97,6 +101,8 @@ func NewSSManager(
 	return agg, nil
 }
 
+// Crash recovery according to https://docs.cometbft.com/v0.38/spec/abci/abci++_app_requirements#crash-recovery
+// todo: make sure all "CometBFT will panic if any of the steps in the sequence happen out of order" scenarios are implemented
 func (m *SSManager) CheckCrashRecovery(ctx context.Context) error {
 	m.logger.Info("checking for crash recovery")
 	res, err := m.proxyApp.Query().Info(ctx, proxy.RequestInfo)
@@ -362,12 +368,6 @@ func (m *SSManager) updateState(ctx context.Context, s types.State) error {
 	return nil
 }
 
-func (m *SSManager) getLastBlockTime() time.Time {
-	m.lastStateMtx.RLock()
-	defer m.lastStateMtx.RUnlock()
-	return m.lastState.LastBlockTime
-}
-
 func (m *SSManager) createBlock(height uint64, timestamp time.Time, txs types.Txs, lastCommit *types.Commit, lastHeaderHash types.Hash) (*types.Block, error) {
 	m.lastStateMtx.RLock()
 	defer m.lastStateMtx.RUnlock()
@@ -437,12 +437,4 @@ func updateState(s *types.State, res *abci.ResponseInitChain) {
 	// We update the last results hash with the empty hash, to conform with RFC-6962.
 	s.LastResultsHash = merkle.HashFromByteSlices(nil)
 
-}
-
-func getAddress(key crypto.PrivKey) ([]byte, error) {
-	rawKey, err := key.GetPublic().Raw()
-	if err != nil {
-		return nil, err
-	}
-	return cmcrypto.AddressHash(rawKey), nil
 }

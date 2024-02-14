@@ -128,28 +128,7 @@ func newFullNode(
 		return nil, err
 	}
 
-	// dalcKV := newPrefixKV(baseKV, dalcPrefix)
-	// dalc, err := initDALC(nodeConfig, dalcKV, logger)
-	// if err != nil {
-	// 	return nil, err
-	// }
-
-	// p2pClient, err := p2p.NewClient(nodeConfig.P2P, p2pKey, genesis.ChainID, baseKV, logger.With("module", "p2p"), p2pMetrics)
-	// if err != nil {
-	// 	return nil, err
-	// }
-
 	mainKV := newPrefixKV(baseKV, mainPrefix)
-
-	// headerSyncService, err := initHeaderSyncService(ctx, mainKV, nodeConfig, genesis, p2pClient, logger)
-	// if err != nil {
-	// 	return nil, err
-	// }
-
-	// blockSyncService, err := initBlockSyncService(ctx, mainKV, nodeConfig, genesis, p2pClient, logger)
-	// if err != nil {
-	// 	return nil, err
-	// }
 
 	mempool := initMempool(logger, proxyApp, memplMetrics)
 
@@ -165,6 +144,7 @@ func newFullNode(
 		return nil, err
 	}
 
+	// check for crash recovery
 	blockManager.CheckCrashRecovery(ctx)
 
 	// genesis info for exec api & sequencer client
@@ -240,36 +220,11 @@ func initBaseKV(nodeConfig config.NodeConfig, logger log.Logger) (ds.TxnDatastor
 	return store.NewDefaultKVStore(nodeConfig.RootDir, nodeConfig.DBPath, "rollkit")
 }
 
-// func initDALC(nodeConfig config.NodeConfig, dalcKV ds.TxnDatastore, logger log.Logger) (*da.DAClient, error) {
-// 	daClient := goDAProxy.NewClient()
-// 	err := daClient.Start(nodeConfig.DAAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
-// 	if err != nil {
-// 		return nil, fmt.Errorf("error while establishing GRPC connection to DA layer: %w", err)
-// 	}
-// 	return &da.DAClient{DA: daClient, GasPrice: nodeConfig.DAGasPrice, Logger: logger.With("module", "da_client")}, nil
-// }
-
 func initMempool(logger log.Logger, proxyApp proxy.AppConns, memplMetrics *mempool.Metrics) *mempool.CListMempool {
 	mempool := mempool.NewCListMempool(llcfg.DefaultMempoolConfig(), proxyApp.Mempool(), 0, mempool.WithMetrics(memplMetrics))
 	mempool.EnableTxsAvailable()
 	return mempool
 }
-
-// func initHeaderSyncService(ctx context.Context, mainKV ds.TxnDatastore, nodeConfig config.NodeConfig, genesis *cmtypes.GenesisDoc, p2pClient *p2p.Client, logger log.Logger) (*block.HeaderSyncService, error) {
-// 	headerSyncService, err := block.NewHeaderSyncService(ctx, mainKV, nodeConfig, genesis, p2pClient, logger.With("module", "HeaderSyncService"))
-// 	if err != nil {
-// 		return nil, fmt.Errorf("error while initializing HeaderSyncService: %w", err)
-// 	}
-// 	return headerSyncService, nil
-// }
-
-// func initBlockSyncService(ctx context.Context, mainKV ds.TxnDatastore, nodeConfig config.NodeConfig, genesis *cmtypes.GenesisDoc, p2pClient *p2p.Client, logger log.Logger) (*block.BlockSyncService, error) {
-// 	blockSyncService, err := block.NewBlockSyncService(ctx, mainKV, nodeConfig, genesis, p2pClient, logger.With("module", "BlockSyncService"))
-// 	if err != nil {
-// 		return nil, fmt.Errorf("error while initializing HeaderSyncService: %w", err)
-// 	}
-// 	return blockSyncService, nil
-// }
 
 func initBlockManager(nodeConfig config.NodeConfig, genesis *cmtypes.GenesisDoc, store store.Store, mempool mempool.Mempool, proxyApp proxy.AppConns, eventBus *cmtypes.EventBus, logger log.Logger, seqMetrics *block.Metrics, execMetrics *state.Metrics) (*block.SSManager, error) {
 	blockManager, err := block.NewSSManager(nodeConfig.BlockManagerConfig, genesis, store, mempool, proxyApp, eventBus, logger.With("module", "BlockManager"), seqMetrics, execMetrics)

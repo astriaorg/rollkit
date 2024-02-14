@@ -178,12 +178,14 @@ func doTestApplyBlock(t *testing.T) {
 	}
 	block.SignedHeader.Validators = cmtypes.NewValidatorSet(validators)
 
-	newState, resp, err := executor.ApplyBlock(context.Background(), state, block)
+	resp, err := executor.ApplyBlock(context.Background(), state, block)
+	require.NoError(err)
+	require.NotNil(resp)
+	newState, err := executor.UpdateState(state, block, resp)
 	require.NoError(err)
 	require.NotNil(newState)
-	require.NotNil(resp)
 	assert.Equal(uint64(1), newState.LastBlockHeight)
-	appHash, _, err := executor.Commit(context.Background(), newState, block, resp)
+	appHash, err := executor.Commit(context.Background(), newState, block, resp, false)
 	require.NoError(err)
 	assert.Equal(mockAppHash, appHash)
 
@@ -207,12 +209,14 @@ func doTestApplyBlock(t *testing.T) {
 	}
 	block.SignedHeader.Validators = cmtypes.NewValidatorSet(validators)
 
-	newState, resp, err = executor.ApplyBlock(context.Background(), newState, block)
+	resp, err = executor.ApplyBlock(context.Background(), newState, block)
+	require.NoError(err)
+	require.NotNil(resp)
+	newState, err = executor.UpdateState(state, block, resp)
 	require.NoError(err)
 	require.NotNil(newState)
-	require.NotNil(resp)
 	assert.Equal(uint64(2), newState.LastBlockHeight)
-	_, _, err = executor.Commit(context.Background(), newState, block, resp)
+	_, err = executor.Commit(context.Background(), newState, block, resp, true)
 	require.NoError(err)
 
 	// wait for at least 4 Tx events, for up to 3 second.
@@ -303,7 +307,7 @@ func TestUpdateStateConsensusParams(t *testing.T) {
 		TxResults: txResults,
 	}
 
-	updatedState, err := executor.updateState(state, block, resp)
+	updatedState, err := executor.UpdateState(state, block, resp)
 	require.NoError(t, err)
 
 	assert.Equal(t, uint64(1235), updatedState.LastHeightConsensusParamsChanged)

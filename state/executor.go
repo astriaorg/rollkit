@@ -373,7 +373,7 @@ func (e *BlockExecutor) commit(ctx context.Context, state types.State, block *ty
 		return nil, err
 	}
 
-	if skipExec == false {
+	if !skipExec {
 		_, err = e.proxyApp.Commit(ctx)
 		if err != nil {
 			return nil, err

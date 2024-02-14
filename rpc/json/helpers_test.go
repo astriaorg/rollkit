@@ -2,25 +2,20 @@ package json
 
 import (
 	"context"
-	"crypto/rand"
 	"testing"
 
 	abci "github.com/cometbft/cometbft/abci/types"
 	cmconfig "github.com/cometbft/cometbft/config"
-	"github.com/cometbft/cometbft/crypto/ed25519"
 	"github.com/cometbft/cometbft/libs/log"
-	"github.com/cometbft/cometbft/p2p"
 	"github.com/cometbft/cometbft/proxy"
 	rpcclient "github.com/cometbft/cometbft/rpc/client"
 	cmtypes "github.com/cometbft/cometbft/types"
-	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/astriaorg/rollkit/config"
 	"github.com/astriaorg/rollkit/node"
 	"github.com/astriaorg/rollkit/test/mocks"
-	"github.com/astriaorg/rollkit/types"
 )
 
 func prepareProposalResponse(_ context.Context, req *abci.RequestPrepareProposal) (*abci.ResponsePrepareProposal, error) {
@@ -65,18 +60,8 @@ func getRPC(t *testing.T) (*mocks.Application, rpcclient.Client) {
 		LastBlockHeight:  345,
 		LastBlockAppHash: nil,
 	}, nil)
-	key, _, _ := crypto.GenerateEd25519Key(rand.Reader)
-	validatorKey := ed25519.GenPrivKey()
-	nodeKey := &p2p.NodeKey{
-		PrivKey: validatorKey,
-	}
-	signingKey, _ := types.GetNodeKey(nodeKey)
-	pubKey := validatorKey.PubKey()
 
-	genesisValidators := []cmtypes.GenesisValidator{
-		{Address: pubKey.Address(), PubKey: pubKey, Power: int64(100), Name: "gen #1"},
-	}
-	n, err := node.NewNode(context.Background(), config.NodeConfig{BlockManagerConfig: config.BlockManagerConfig{}}, key, signingKey, proxy.NewLocalClientCreator(app), &cmtypes.GenesisDoc{ChainID: "test", Validators: genesisValidators}, node.DefaultMetricsProvider(cmconfig.DefaultInstrumentationConfig()), log.TestingLogger())
+	n, err := node.NewNode(context.Background(), config.NodeConfig{BlockManagerConfig: config.BlockManagerConfig{}}, proxy.NewLocalClientCreator(app), &cmtypes.GenesisDoc{ChainID: "test"}, node.DefaultMetricsProvider(cmconfig.DefaultInstrumentationConfig()), log.TestingLogger())
 	require.NoError(err)
 	require.NotNil(n)
 
