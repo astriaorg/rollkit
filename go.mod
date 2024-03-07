@@ -33,10 +33,10 @@ require (
 )
 
 require (
-	buf.build/gen/go/astria/astria/protocolbuffers/go v1.32.0-20240208213846-0e715ec578d3.1
-	buf.build/gen/go/astria/execution-apis/grpc/go v1.3.0-20240207231045-2f6384a93a8d.2
-	buf.build/gen/go/astria/execution-apis/protocolbuffers/go v1.32.0-20240207231045-2f6384a93a8d.1
-	github.com/astriaorg/go-sequencer-client v0.0.0-20231201013457-0df599de8e74
+	buf.build/gen/go/astria/astria/protocolbuffers/go v1.32.0-20240307175025-b24dec4bdce2.1
+	buf.build/gen/go/astria/execution-apis/grpc/go v1.3.0-20240209225522-97e3bc68f856.2
+	buf.build/gen/go/astria/execution-apis/protocolbuffers/go v1.32.0-20240209225522-97e3bc68f856.1
+	github.com/astriaorg/go-sequencer-client v0.2.0-alpha.2
 	github.com/celestiaorg/go-header v0.5.2
 	github.com/ipfs/go-ds-badger4 v0.1.5
 )
@@ -180,6 +180,8 @@ require (
 	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/tools v0.16.0 // indirect
 	gonum.org/v1/gonum v0.12.0 // indirect
+	google.golang.org/genproto v0.0.0-20231106174013-bbf56f31fb17 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20231106174013-bbf56f31fb17 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20231120223509-83a465c0220f // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
