@@ -29,14 +29,14 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/net v0.20.0
 	google.golang.org/grpc v1.61.0
-	google.golang.org/protobuf v1.32.0
+	google.golang.org/protobuf v1.33.0
 )
 
 require (
-	buf.build/gen/go/astria/astria/protocolbuffers/go v1.32.0-20240307175025-b24dec4bdce2.1
+	buf.build/gen/go/astria/astria/protocolbuffers/go v1.33.0-20240403190008-c770a4039013.1
 	buf.build/gen/go/astria/execution-apis/grpc/go v1.3.0-20240209225522-97e3bc68f856.2
 	buf.build/gen/go/astria/execution-apis/protocolbuffers/go v1.32.0-20240209225522-97e3bc68f856.1
-	github.com/astriaorg/go-sequencer-client v0.2.0-alpha.2
+	github.com/astriaorg/go-sequencer-client v0.2.0-alpha.2.0.20240319201724-8dfc0ed60f1b
 	github.com/celestiaorg/go-header v0.5.2
 	github.com/ipfs/go-ds-badger4 v0.1.5
 )

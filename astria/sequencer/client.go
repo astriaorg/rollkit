@@ -5,7 +5,7 @@ import (
 	"crypto/ed25519"
 	"fmt"
 
-	astriaPb "buf.build/gen/go/astria/astria/protocolbuffers/go/astria/sequencer/v1alpha1"
+	astriaPb "buf.build/gen/go/astria/astria/protocolbuffers/go/astria/sequencer/v1"
 	"github.com/astriaorg/go-sequencer-client/client"
 	"github.com/cometbft/cometbft/libs/log"
 	tendermintPb "github.com/cometbft/cometbft/rpc/core/types"
