@@ -6,32 +6,43 @@ import (
 	"fmt"
 
 	astriaPb "buf.build/gen/go/astria/astria/protocolbuffers/go/astria/sequencer/v1"
+	"buf.build/gen/go/astria/composer-apis/grpc/go/astria/composer/v1alpha1/composerv1alpha1grpc"
+	astriaComposerPb "buf.build/gen/go/astria/composer-apis/protocolbuffers/go/astria/composer/v1alpha1"
 	"github.com/astriaorg/go-sequencer-client/client"
 	"github.com/cometbft/cometbft/libs/log"
 	tendermintPb "github.com/cometbft/cometbft/rpc/core/types"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
 // SequencerClient is a client for interacting with the sequencer.
 type Client struct {
-	Client   *client.Client
-	Signer   *client.Signer
-	rollupId [32]byte
-	nonce    uint32
-	logger   log.Logger
+	Client         *client.Client
+	composerClient *grpc.ClientConn
+	Signer         *client.Signer
+	rollupId       []byte
+	nonce          uint32
+	logger         log.Logger
 }
 
-func NewClient(sequencerAddr string, private ed25519.PrivateKey, rollupId [32]byte, logger log.Logger) *Client {
+func NewClient(sequencerAddr string, composerAddr string, private ed25519.PrivateKey, rollupId []byte, logger log.Logger) *Client {
 	c, err := client.NewClient(sequencerAddr)
 	if err != nil {
 		panic(err)
 	}
 
+	conn, err := grpc.Dial(composerAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		panic(err)
+	}
+
 	return &Client{
-		Client:   c,
-		Signer:   client.NewSigner(private),
-		rollupId: rollupId,
-		logger:   logger,
+		Client:         c,
+		composerClient: conn,
+		Signer:         client.NewSigner(private),
+		rollupId:       rollupId,
+		logger:         logger,
 	}
 }
 
@@ -96,4 +107,19 @@ func (c *Client) BroadcastTx(tx []byte) (*tendermintPb.ResultBroadcastTx, error)
 	}
 
 	return resp, nil
+}
+
+func (sc *Client) SendMessageViaComposer(tx []byte) error {
+	grpcCollectorServiceClient := composerv1alpha1grpc.NewGrpcCollectorServiceClient(sc.composerClient)
+	// if the request succeeds, then an empty response will be returned which can be ignored for now
+	_, err := grpcCollectorServiceClient.SubmitRollupTransaction(context.Background(), &astriaComposerPb.SubmitRollupTransactionRequest{
+		RollupId: sc.rollupId,
+		Data:     tx,
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
+
 }

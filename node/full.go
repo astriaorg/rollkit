@@ -162,7 +162,7 @@ func newFullNode(
 		return nil, err
 	}
 	private := ed25519.NewKeyFromSeed(privateKeyBytes)
-	seqClient := sequencer.NewClient(nodeConfig.Astria.SeqAddress, private, execGenesisInfo.RollupId, logger.With("module", "seqclient"))
+	seqClient := sequencer.NewClient(nodeConfig.Astria.SeqAddress, nodeConfig.Astria.ComposerRpc, private, execGenesisInfo.RollupId[:], logger.With("module", "seqclient"))
 	reaper := astriamempool.NewMempoolReaper(seqClient, mempool, logger.With("module", "reaper"))
 
 	// init grpc execution api

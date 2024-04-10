@@ -12,6 +12,7 @@ const (
 
 	flagAstriaGrpcListen       = "rollkit.astria_grpc_listen"
 	flagAstriaSeqAddress       = "rollkit.astria_seq_addr"
+	flagAstriaComposerRpc      = "rollkit.astria_composer_rpc_addr"
 	flagAstriaSeqPrivate       = "rollkit.astria_seq_private"
 	flagAstriaSeqInitialHeight = "rollkit.astria_seq_initial_height"
 	flagDAVariance             = "rollkit.da_variance"
@@ -42,6 +43,7 @@ type BlockManagerConfig struct {
 type AstriaSeqConfig struct {
 	GrpcListen       string `mapstructure:"astria_grpc_listen"`
 	SeqAddress       string `mapstructure:"astria_seq_addr"`
+	ComposerRpc      string `mapstructure:"astria_composer_rpc_addr"`
 	SeqPrivate       string `mapstructure:"astria_seq_private"`
 	SeqInitialHeight uint64 `mapstructure:"astria_seq_initial_height"`
 }
@@ -82,6 +84,7 @@ func (nc *NodeConfig) GetViperConfig(v *viper.Viper) error {
 
 	nc.Astria.GrpcListen = v.GetString(flagAstriaGrpcListen)
 	nc.Astria.SeqAddress = v.GetString(flagAstriaSeqAddress)
+	nc.Astria.ComposerRpc = v.GetString(flagAstriaComposerRpc)
 	nc.Astria.SeqPrivate = v.GetString(flagAstriaSeqPrivate)
 	nc.Astria.SeqInitialHeight = v.GetUint64(flagAstriaSeqInitialHeight)
 
@@ -95,6 +98,7 @@ func AddFlags(cmd *cobra.Command) {
 	def := DefaultNodeConfig
 	cmd.Flags().String(flagAstriaGrpcListen, def.Astria.GrpcListen, "Astria gRPC listen address for execution api")
 	cmd.Flags().String(flagAstriaSeqAddress, def.Astria.SeqAddress, "Astria sequencer address")
+	cmd.Flags().String(flagAstriaComposerRpc, def.Astria.ComposerRpc, "Astria composer RPC address")
 	cmd.Flags().String(flagAstriaSeqPrivate, def.Astria.SeqPrivate, "Astria sequencer private key")
 	cmd.Flags().Uint64(flagDAStartHeight, def.DAStartHeight, "The first block height of celestia chain to use for rollup transactions")
 	cmd.Flags().Uint64(flagAstriaSeqInitialHeight, def.Astria.SeqInitialHeight, "The first block height of sequencer chain to use for rollup transactions")

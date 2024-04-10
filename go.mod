@@ -42,6 +42,8 @@ require (
 )
 
 require (
+	buf.build/gen/go/astria/composer-apis/grpc/go v1.3.0-20240329163554-64ef75007d48.2 // indirect
+	buf.build/gen/go/astria/composer-apis/protocolbuffers/go v1.33.0-20240329163554-64ef75007d48.1 // indirect
 	github.com/benbjohnson/clock v1.3.5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/btcsuite/btcd/btcec/v2 v2.3.2 // indirect

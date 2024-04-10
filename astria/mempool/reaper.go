@@ -1,7 +1,6 @@
 package mempool
 
 import (
-	"fmt"
 	"sync"
 
 	"github.com/astriaorg/rollkit/astria/sequencer"
@@ -13,7 +12,6 @@ type MempoolReaper struct {
 	c       *sequencer.Client
 	mempool *mempool.CListMempool
 	logger  log.Logger
-
 	mu      sync.Mutex
 	started bool
 	stopCh  chan struct{}
@@ -53,11 +51,12 @@ func (mr *MempoolReaper) Reap() {
 					mr.logger.Info("reaped tx from mempool", "tx", mempoolTx.Tx())
 
 					// submit to shared sequencer
-					res, err := mr.c.BroadcastTx(mempoolTx.Tx())
+					err := mr.c.SendMessageViaComposer(mempoolTx.Tx())
 					if err != nil {
-						panic(fmt.Sprintf("error sending message: %s\n", err))
+						mr.logger.Error("error sending message: %s\n", err)
+						return
 					}
-					mr.logger.Debug("tx response", "log", res.Log)
+					mr.logger.Debug("succesfully sent transaction to composer")
 
 					// wait for next tx
 					tx0 = tx0.NextWait()

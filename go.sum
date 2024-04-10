@@ -2,6 +2,11 @@
 bitbucket.org/creachadair/shell v0.0.6/go.mod h1:8Qqi/cYk7vPnsOePHroKXDJYmb5x7ENhtiFtfZq8K+M=
 buf.build/gen/go/astria/astria/protocolbuffers/go v1.33.0-20240403190008-c770a4039013.1 h1:/JMLS3FOO3uvJaV1dO9AowylUiA2axxyQ+MVWxgGnZQ=
 buf.build/gen/go/astria/astria/protocolbuffers/go v1.33.0-20240403190008-c770a4039013.1/go.mod h1:ajk84nq5amXeWBNpY1SIIWNjaqlylLm8W5SJd8AqXBM=
+buf.build/gen/go/astria/composer-apis/grpc/go v1.3.0-20240329163554-64ef75007d48.2 h1:3ruOAo7ec4ydfI0S8e9PpP216zaVFKOva0ybj0WfwrY=
+buf.build/gen/go/astria/composer-apis/grpc/go v1.3.0-20240329163554-64ef75007d48.2/go.mod h1:wvrUH/9cbYsOP+H1CqwfAYpdn4sRQ0DsP2TBYeWLtpk=
+buf.build/gen/go/astria/composer-apis/protocolbuffers/go v1.28.1-20240329163554-64ef75007d48.4/go.mod h1:KHkk6Dwc7uRTiQ0kSuN/PbePwD9RP9/VdLwJ9eWiZYo=
+buf.build/gen/go/astria/composer-apis/protocolbuffers/go v1.33.0-20240329163554-64ef75007d48.1 h1:OmL6g54SD3F1MkNx2UCMqcQxSwjCjbs/jxdfhHCHxhk=
+buf.build/gen/go/astria/composer-apis/protocolbuffers/go v1.33.0-20240329163554-64ef75007d48.1/go.mod h1:LClp/p6nNkJZhhXypS4e/qIpPhT+7T/MdLBiGi9WsKk=
 buf.build/gen/go/astria/execution-apis/grpc/go v1.3.0-20240209225522-97e3bc68f856.2 h1:mK0jVG2+QlJrPKsgL46KKh2ZqHc8lyexQP3TUcOvvNU=
 buf.build/gen/go/astria/execution-apis/grpc/go v1.3.0-20240209225522-97e3bc68f856.2/go.mod h1:soA8k5qokjmp9DmV6jdcWndlVdSYjfa8KJZgsJrvixc=
 buf.build/gen/go/astria/execution-apis/protocolbuffers/go v1.28.1-20240209225522-97e3bc68f856.4/go.mod h1:5wxRDkWimPnuhDUA4pFBaHMtrViNJAHguLU1Wq8T6x8=
