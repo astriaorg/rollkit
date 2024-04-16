@@ -2,8 +2,6 @@ module github.com/astriaorg/rollkit
 
 go 1.21.1
 
-toolchain go1.21.4
-
 require (
 	github.com/celestiaorg/utils v0.1.0
 	github.com/cometbft/cometbft v0.38.5
@@ -34,6 +32,8 @@ require (
 
 require (
 	buf.build/gen/go/astria/astria/protocolbuffers/go v1.33.0-20240403190008-c770a4039013.1
+	buf.build/gen/go/astria/composer-apis/grpc/go v1.3.0-20240329163554-64ef75007d48.2
+	buf.build/gen/go/astria/composer-apis/protocolbuffers/go v1.33.0-20240329163554-64ef75007d48.1
 	buf.build/gen/go/astria/execution-apis/grpc/go v1.3.0-20240209225522-97e3bc68f856.2
 	buf.build/gen/go/astria/execution-apis/protocolbuffers/go v1.32.0-20240209225522-97e3bc68f856.1
 	github.com/astriaorg/go-sequencer-client v0.2.0-alpha.2.0.20240319201724-8dfc0ed60f1b
@@ -42,8 +42,6 @@ require (
 )
 
 require (
-	buf.build/gen/go/astria/composer-apis/grpc/go v1.3.0-20240329163554-64ef75007d48.2 // indirect
-	buf.build/gen/go/astria/composer-apis/protocolbuffers/go v1.33.0-20240329163554-64ef75007d48.1 // indirect
 	github.com/benbjohnson/clock v1.3.5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/btcsuite/btcd/btcec/v2 v2.3.2 // indirect

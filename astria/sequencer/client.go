@@ -3,6 +3,7 @@ package sequencer
 import (
 	"context"
 	"crypto/ed25519"
+	"flag"
 	"fmt"
 
 	astriaPb "buf.build/gen/go/astria/astria/protocolbuffers/go/astria/sequencer/v1"
@@ -14,6 +15,10 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/encoding/protojson"
+)
+
+var (
+	addr = flag.String("addr", "127.0.0.1:5053", "the address to connect to")
 )
 
 // SequencerClient is a client for interacting with the sequencer.
@@ -28,11 +33,14 @@ type Client struct {
 
 func NewClient(sequencerAddr string, composerAddr string, private ed25519.PrivateKey, rollupId []byte, logger log.Logger) *Client {
 	c, err := client.NewClient(sequencerAddr)
+
+	// Signer for the sequencer client
+	signer := client.NewSigner(private)
 	if err != nil {
 		panic(err)
 	}
-
-	conn, err := grpc.Dial(composerAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	// TODO: get addr from env
+	conn, err := grpc.Dial(*addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		panic(err)
 	}
@@ -40,12 +48,13 @@ func NewClient(sequencerAddr string, composerAddr string, private ed25519.Privat
 	return &Client{
 		Client:         c,
 		composerClient: conn,
-		Signer:         client.NewSigner(private),
+		Signer:         signer,
 		rollupId:       rollupId,
 		logger:         logger,
 	}
 }
 
+// TODO: remove support for direct sequencer tx submission
 func (c *Client) BroadcastTx(tx []byte) (*tendermintPb.ResultBroadcastTx, error) {
 	unsigned := &astriaPb.UnsignedTransaction{
 		Nonce: c.nonce,
@@ -110,12 +119,14 @@ func (c *Client) BroadcastTx(tx []byte) (*tendermintPb.ResultBroadcastTx, error)
 }
 
 func (sc *Client) SendMessageViaComposer(tx []byte) error {
+
 	grpcCollectorServiceClient := composerv1alpha1grpc.NewGrpcCollectorServiceClient(sc.composerClient)
 	// if the request succeeds, then an empty response will be returned which can be ignored for now
-	_, err := grpcCollectorServiceClient.SubmitRollupTransaction(context.Background(), &astriaComposerPb.SubmitRollupTransactionRequest{
+	resp, err := grpcCollectorServiceClient.SubmitRollupTransaction(context.Background(), &astriaComposerPb.SubmitRollupTransactionRequest{
 		RollupId: sc.rollupId,
 		Data:     tx,
 	})
+	sc.logger.Info("Sending through composer grpc collector", "respond", resp.String())
 	if err != nil {
 		return err
 	}

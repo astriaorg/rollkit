@@ -26,7 +26,7 @@ var DefaultNodeConfig = NodeConfig{
 	Astria: AstriaSeqConfig{
 		GrpcListen:       ":50051",
 		SeqAddress:       "http://localhost:26657",
-		ComposerRpc:      "127.0.0.1:5053",
+		ComposerRpc:      "http://127.0.0.1:5053",
 		SeqPrivate:       "2bd806c97f0e00af1a1fc3328fa763a9269723c8db8fac4f93af71db186d6e90",
 		SeqInitialHeight: 1,
 	},

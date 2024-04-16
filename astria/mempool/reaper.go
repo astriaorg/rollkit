@@ -1,6 +1,7 @@
 package mempool
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/astriaorg/rollkit/astria/sequencer"
@@ -53,14 +54,14 @@ func (mr *MempoolReaper) Reap() {
 					// submit to shared sequencer
 					err := mr.c.SendMessageViaComposer(mempoolTx.Tx())
 					if err != nil {
-						mr.logger.Info("error sending message via composer, trying directly: %s\n", err)
+						//TODO: remove support for direct sequencer tx submission
+						mr.logger.Info(fmt.Sprint("error sending message via composer, trying directly: \n", err))
 
 						res, err := mr.c.BroadcastTx(mempoolTx.Tx())
 						if err != nil {
 							mr.logger.Error("error sending message: %s\n", err)
 						}
 						mr.logger.Debug("tx response", "log", res.Log)
-						return
 					}
 					mr.logger.Debug("succesfully sent transaction to composer")
 
